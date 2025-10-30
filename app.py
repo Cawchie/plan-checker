@@ -29,7 +29,7 @@ if files:
         with st.spinner("Checking..."):
             try:
                 resp = client.chat.completions.create(
-                    model="grok-beta",
+                    model="grok-3",
                     messages=[
                         {"role": "system", "content": "You are a New Zealand Building Code expert. Check E1, D1, B1, H1, geotech, etc. List passes, flags, fixes."},
                         {"role": "user", "content": text}
