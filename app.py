@@ -49,7 +49,7 @@ if files:
 						if "CC" in cc_mode.upper():
     					system_prompt += "\n\nCOMPLIANCE CHECK MODE: Only give bullet points with page numbers for non-compliant issues. No learning summary."
 
-						{"role": "system", "content": system_prompt},
+						{"role": "system", "content": system_prompt"},
                     ]
                 )
                 st.success("Done!")
