@@ -6,15 +6,14 @@ import os
 
 st.title("xAI Plan Checker")
 
-# Get key from env var (set in Streamlit Cloud)
 api_key = os.environ.get("XAI_API_KEY")
 if not api_key:
-    st.error("API key missing! Set XAI_API_KEY in Streamlit Cloud.")
+    st.error("API key missing! Add XAI_API_KEY in Streamlit Cloud.")
     st.stop()
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-files = st.file_uploader("Upload Plans & Geotech PDFs", type="pdf", accept_multiple_files=True)
+files = st.file_uploader("Upload PDFs", type="pdf", accept_multiple_files=True)
 
 if files:
     text = ""
@@ -27,10 +26,10 @@ if files:
         text += f"\n--- END OF {f.name} ---\n"
 
     if text.strip():
-        with st.spinner("Checking with xAI..."):
+        with st.spinner("Checking..."):
             try:
                 resp = client.chat.completions.create(
-                    model="grok-beta",  # Free model
+                    model="grok-beta",
                     messages=[
                         {"role": "system", "content": "You are a New Zealand Building Code expert. Check E1, D1, B1, H1, geotech, etc. List passes, flags, fixes."},
                         {"role": "user", "content": text}
