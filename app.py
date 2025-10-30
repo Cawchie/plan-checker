@@ -49,8 +49,10 @@ if files:
 						if "CC" in cc_mode.upper():
     					system_prompt += "\n\nCOMPLIANCE CHECK MODE: Only give bullet points with page numbers for non-compliant issues. No learning summary."
 
-						{"role": "system", "content": system_prompt"},
-                    ]
+						messages=[
+   						 {"role": "system", "content": system_prompt},
+   						 {"role": "user", "content": text}
+						]
                 )
                 st.success("Done!")
                 st.markdown(resp.choices[0].message.content)
