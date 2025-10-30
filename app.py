@@ -53,7 +53,7 @@ if files:
    						 {"role": "system", "content": system_prompt},
    						 {"role": "user", "content": text}
 					],
-                )
+                ]
                 st.success("Done!")
                 st.markdown(resp.choices[0].message.content)
             except Exception as e:
