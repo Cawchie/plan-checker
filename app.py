@@ -1,4 +1,4 @@
-import streamlit as st
+	import streamlit as st
 from openai import OpenAI
 import PyPDF2
 import io
@@ -29,9 +29,13 @@ if files:
     if text.strip():
         with st.spinner("Checking..."):
             try:
-                resp = client.chat.completions.create)
-                    model="grok-3",
-                    messages=[
+                resp = client.chat.completions.create(
+    			model="grok-3",
+    			messages=[
+       			 {"role": "system", "content": system_prompt},
+       			 {"role": "user", "content": text}
+  			  ]
+			)
                         system_prompt = """Learn to design & review building consent plans that comply with the New Zealand building code & various council town plans by reviewing plans & documents I upload. I will upload as much of my previous work as I can & council requests for more information & the responses I provided to council. Goal is to create a tool that users can upload plans & get updated compliance check against all known rules/town planning/NZBC/RFI requests & responses you have learned and provide bullet points with page numbers where you see errors or things that need adding/removing/updating or clarifying etc on the plans
 
 						Phase 1 is the learning stage, prompt me when you have learned enough about a particular job & I will then upload the next set of documents
