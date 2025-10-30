@@ -41,7 +41,7 @@ if files:
 						When a new plan is uploaded for compliance check asses against all known rules/town planning/NZBC/RFI requests & responses you have learned and provide bullet points with page numbers where you see errors or things that need adding/removing or updating or clarifying etc on the plans
 
 						Only give bullet points regarding non compliant issues through out the plans, ignore parroting information that has nothing to do with compliance"},
-                        {"role": "user", "content": text}
+                        {"role": "user", "content": text"}
                     ]
                 )
                 st.success("Done!")
