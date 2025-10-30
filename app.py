@@ -14,6 +14,7 @@ if not api_key:
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
 files = st.file_uploader("Upload PDFs", type="pdf", accept_multiple_files=True)
+cc_mode = st.text_input("Type 'CC' to start compliance check", "")
 
 if files:
     text = ""
@@ -31,7 +32,7 @@ if files:
                 resp = client.chat.completions.create(
                     model="grok-3",
                     messages=[
-                        {"role": "system", "content": """Learn to design & review building consent plans that comply with the New Zealand building code & various council town plans by reviewing plans & documents I upload. I will upload as much of my previous work as I can & council requests for more information & the responses I provided to council. Goal is to create a tool that users can upload plans & get updated compliance check against all known rules/town planning/NZBC/RFI requests & responses you have learned and provide bullet points with page numbers where you see errors or things that need adding/removing/updating or clarifying etc on the plans
+                        system_prompt = """Learn to design & review building consent plans that comply with the New Zealand building code & various council town plans by reviewing plans & documents I upload. I will upload as much of my previous work as I can & council requests for more information & the responses I provided to council. Goal is to create a tool that users can upload plans & get updated compliance check against all known rules/town planning/NZBC/RFI requests & responses you have learned and provide bullet points with page numbers where you see errors or things that need adding/removing/updating or clarifying etc on the plans
 
 						Phase 1 is the learning stage, prompt me when you have learned enough about a particular job & I will then upload the next set of documents
 
@@ -43,8 +44,12 @@ if files:
 
 						When a new plan is uploaded for compliance check (CC) asses against all known rules/town planning/NZBC/RFI requests & responses you have learned and provide bullet points with page numbers where compliance check (C) or asses that need adding/removing/updating/NZBC/RFI etc on the plans you have learned and provide
 
-						Only give bullet points regarding non compliant issues through out the plans, ignore parroting information that has nothing to do with compliance"""},
-						{"role": "user", "content": text}
+						Only give bullet points regarding non compliant issues through out the plans, ignore parroting information that has nothing to do with compliance"""
+
+						if "CC" in cc_mode.upper():
+    					system_prompt += "\n\nCOMPLIANCE CHECK MODE: Only give bullet points with page numbers for non-compliant issues. No learning summary."
+
+						{"role": "system", "content": system_prompt},
                     ]
                 )
                 st.success("Done!")
