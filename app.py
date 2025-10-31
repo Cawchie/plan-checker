@@ -14,80 +14,92 @@ if not api_key:
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-# Step 1: Upload plans
+# Step 1: Upload Plans
 st.header("Step 1: Upload Plans")
 plan_files = st.file_uploader("Upload plans", type="pdf", accept_multiple_files=True, key="plans")
 
-# Step 2: Upload supporting docs
-st.header("Step 2: Upload Supporting Docs")
-support_files = st.file_uploader("Upload geotech, H1, RFIs", type="pdf", accept_multiple_files=True, key="support")
+# Step 2: Upload Supporting Docs
+st.header("Step 2: Upload Supporting Docs (Geotech, H1, etc.)")
+support_files = st.file_uploader("Upload geotech, H1 calcs, etc.", type="pdf", accept_multiple_files=True, key="support")
 
-# Combine files
+# Step 3: Upload RFIs (SEPARATE)
+st.header("Step 3: Upload RFI (Council Request for Information)")
+rfi_files = st.file_uploader("Upload RFI document", type="pdf", accept_multiple_files=False, key="rfi")
+
+# Combine non-RFI files
 files = plan_files + support_files
 
 if files and st.button("Check Compliance"):
     text = ""
-    rfi_mode = False
-    rfi_content = ""
+    rfi_text = ""
 
+    # Process non-RFI files
     for f in files:
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
             for page_num, page in enumerate(reader.pages, 1):
                 page_text = page.extract_text() or ""
                 if page_text.strip():
-                    if "RFI" in f.name.upper() or "REQUEST FOR INFORMATION" in page_text.upper():
-                        rfi_mode = True
-                        rfi_content += f"--- RFI: {f.name} - Page {page_num} ---\n{page_text}\n"
-                    else:
-                        text += f"--- {f.name} - Page {page_num} ---\n{page_text}\n"
+                    text += f"--- {f.name} - Page {page_num} ---\n{page_text}\n"
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
-    if text.strip() or rfi_content:
+    # Process RFI if uploaded
+    if rfi_files:
+        try:
+            reader = PyPDF2.PdfReader(io.BytesIO(rfi_files.getvalue()))
+            for page_num, page in enumerate(reader.pages, 1):
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    rfi_text += f"--- RFI: {rfi_files.name} - Page {page_num} ---\n{page_text}\n"
+        except Exception as e:
+            st.error(f"Failed to read RFI: {e}")
+
+    if text.strip() or rfi_text:
         with st.spinner("Checking..."):
             try:
-                if rfi_mode:
-                    # RFI MODE: Only answer the RFI
+                if rfi_text:
+                    # RFI MODE
                     system_prompt = """You are a NZBC compliance engineer responding to council RFIs.
 
-ONLY address the RFI questions from the uploaded RFI document.
+ONLY address the RFI questions.
 
 For each RFI point:
 - RFI FILE + PAGE
 - Question
-- Direct answer with NZBC clause and fix
-- No other compliance checks
+- **SUGGESTED SOLUTION** (practical, cost-effective)
+- **ALTERNATIVE** if main fix is impractical (e.g., can't move building → fire-rate wall instead)
 
 Example:
-- RFI.pdf Page 1: E1 overflow path
-  - Question: No secondary flow path shown
-  - Answer: Add 150mm freeboard to tank (E1.3.1). See updated plan Page 3."""
+- RFI.pdf Page 1: Setback breach
+  - Question: Building 1.2m from boundary
+  - Suggested: Apply for resource consent variation
+  - Alternative: Fire-rate wall to FRL 60/60/60 (Clause C6)"""
                 else:
                     # FULL COMPLIANCE MODE
-                    system_prompt = """You are a NZBC compliance auditor with 20 years experience.
+                    system_prompt = """You are a NZBC compliance auditor.
 
-CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
+CHECK EVERY PAGE.
 
-For EACH non-compliant item:
-- FILE NAME + PAGE NUMBER
-- Clause (e.g., E1.3.1)
-- Issue description
-- POTENTIAL FIX
+For EACH non-compliant issue:
+- FILE + PAGE
+- Clause
+- Issue
+- **SUGGESTED FIX**
+- **ALTERNATIVE** if main fix is impractical
 
-CHECK:
-E1, E2, E3, B1, B2, D1, D2, F1–F9, G1–G15, H1
-Council: height, coverage, setbacks, zoning
-Geotech: soil bearing, liquefaction
-H1: R-values, thermal bridging
-
-ONLY bullet points. NO summary."""
+Example:
+- Plan.pdf Page 3: E1 overflow missing
+  - Clause: E1. Jahrhundert
+  - Issue: No secondary flow path
+  - Suggested: Add 150mm freeboard
+  - Alternative: Direct to council drain with consent"""
 
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": rfi_content + text if rfi_mode else text}
+                        {"role": "user", "content": rfi_text + text if rfi_text else text}
                     ]
                 )
                 st.success("Check Complete")
