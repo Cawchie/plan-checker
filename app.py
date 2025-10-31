@@ -7,47 +7,12 @@ import os
 # === PRO LOOK (CSS) ===
 st.markdown("""
 <style>
-    .main {
-        background-color: #f8f9fa;
-        padding: 2rem;
-        border-radius: 10px;
-    }
-    .stButton>button {
-        background-color: #007bff;
-        color: white;
-        font-weight: bold;
-        border-radius: 8px;
-        padding: 0.6rem 1.2rem;
-        font-size: 1.1rem;
-        width: 100%;
-        margin: 0.5rem 0;
-    }
-    .stFileUploader > div > div {
-        background-color: #e9ecef;
-        border-radius: 8px;
-        padding: 1rem;
-        border: 2px dashed #ced4da;
-    }
-    h1, h2, h3 {
-        color: #343a40;
-        font-family: 'Helvetica', sans-serif;
-        font-weight: 600;
-    }
-    .report {
-        background-color: #fff3cd;
-        padding: 1.2rem;
-        border-left: 6px solid #ffc107;
-        border-radius: 8px;
-        margin: 1.5rem 0;
-        font-size: 1.05rem;
-        line-height: 1.6;
-    }
-    .footer {
-        text-align: center;
-        margin-top: 3rem;
-        color: #6c757d;
-        font-size: 0.9rem;
-    }
+    .main { background-color: #f8f9fa; padding: 2rem; border-radius: 10px; }
+    .stButton>button { background-color: #007bff; color: white; font-weight: bold; border-radius: 8px; padding: 0.6rem 1.2rem; font-size: 1.1rem; width: 100%; margin: 0.5rem 0; }
+    .stFileUploader > div > div { background-color: #e9ecef; border-radius: 8px; padding: 1rem; border: 2px dashed #ced4da; }
+    h1, h2, h3 { color: #343a40; font-family: 'Helvetica', sans-serif; font-weight: 600; }
+    .report { background-color: #fff3cd; padding: 1.2rem; border-left: 6px solid #ffc107; border-radius: 8px; margin: 1.5rem 0; font-size: 1.05rem; line-height: 1.6; }
+    .footer { text-align: center; margin-top: 3rem; color: #6c757d; font-size: 0.9rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -61,16 +26,16 @@ if not api_key:
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-# Step 1: Upload Plans
-st.header("Step 1: Upload Plans")
+# Upload Plans
+st.header("Upload Plans (Required)")
 plan_files = st.file_uploader("Upload plans", type="pdf", accept_multiple_files=True, key="plans")
 
-# Step 2: Upload Supporting Docs
-st.header("Step 2: Upload Supporting Docs (Geotech, H1, etc.)")
+# Upload Supporting Docs
+st.header("Upload Supporting Docs (Geotech, H1, etc.)")
 support_files = st.file_uploader("Upload geotech, H1 calcs, etc.", type="pdf", accept_multiple_files=True, key="support")
 
-# Step 3: Upload RFI (SEPARATE)
-st.header("Step 3: Upload RFI (Council Request)")
+# Upload RFI
+st.header("Upload RFI (Optional)")
 rfi_file = st.file_uploader("Upload RFI document", type="pdf", accept_multiple_files=False, key="rfi")
 
 # Combine non-RFI files
@@ -124,6 +89,10 @@ if check_compliance and files:
 
 CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
 
+LOOK FOR:
+- KEY/LEGEND items (smoke alarms, vents, fire doors, etc.)
+- SYMBOLS on the plan (SD, FD, V, H, etc.)
+
 For EACH non-compliant item:
 - FILE NAME + PAGE NUMBER
 - Clause (e.g., E1.3.1)
@@ -131,11 +100,18 @@ For EACH non-compliant item:
 - SUGGESTED FIX
 - ALTERNATIVE (if main fix is impractical)
 
-CHECK:
-E1, E2, E3, B1, B2, D1, D2, F1–F9, G1–G15, H1
-Council: height, coverage, setbacks, zoning
-Geotech: soil bearing, liquefaction
-H1: R-values, thermal bridging
+LINK KEY TO PLAN:
+- If KEY says "SD = Smoke Detector" → Find SD symbols
+- If symbol missing → FLAG IT
+
+DO NOT SKIP ANYTHING. BE DETAILED.
+
+Example:
+- PLAN.pdf Page 6: F7.3.1 smoke detectors
+  - Clause: F7.3.1
+  - Issue: KEY says "SD required" but no SD in bedrooms
+  - Suggested: Add SD within 3m of bedroom doors
+  - Alternative: Note "to be installed per F7/AS1"
 
 ONLY bullet points. NO summary."""},
                         {"role": "user", "content": text}
