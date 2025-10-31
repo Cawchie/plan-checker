@@ -20,61 +20,64 @@ plan_files = st.file_uploader("Upload plans", type="pdf", accept_multiple_files=
 
 # Step 2: Upload Supporting Docs
 st.header("Step 2: Upload Supporting Docs (Geotech, H1, etc.)")
-support_files = st.file_uploader("Upload geotech, H1 calcs, etc.", type="pdf", accept_multiple_files=True, key="support")
+support_files = st.file_uploader("Upload geotech, H1, etc.", type="pdf", accept_multiple_files=True, key="support")
 
-# Step 3: Upload RFIs (SEPARATE)
-st.header("Step 3: Upload RFI (Council Request for Information)")
-rfi_files = st.file_uploader("Upload RFI document", type="pdf", accept_multiple_files=False, key="rfi")
+# Step 3: Upload RFI
+st.header("Step 3: Upload RFI (Council Request)")
+rfi_file = st.file_uploader("Upload RFI document", type="pdf", accept_multiple_files=False, key="rfi")
 
 # Combine non-RFI files
 files = plan_files + support_files
 
 if files and st.button("Check Compliance"):
-    text = ""
-    rfi_text = ""
-
-    # Process non-RFI files
+    # Extract text from plans
+    plan_text = ""
     for f in files:
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
             for page_num, page in enumerate(reader.pages, 1):
                 page_text = page.extract_text() or ""
                 if page_text.strip():
-                    text += f"--- {f.name} - Page {page_num} ---\n{page_text}\n"
+                    plan_text += f"--- {f.name} - Page {page_num} ---\n{page_text}\n"
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
-    # Process RFI if uploaded
-    if rfi_files:
+    # Extract RFI text
+    rfi_text = ""
+    if rfi_file:
         try:
-            reader = PyPDF2.PdfReader(io.BytesIO(rfi_files.getvalue()))
+            reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
             for page_num, page in enumerate(reader.pages, 1):
                 page_text = page.extract_text() or ""
                 if page_text.strip():
-                    rfi_text += f"--- RFI: {rfi_files.name} - Page {page_num} ---\n{page_text}\n"
+                    rfi_text += f"--- RFI: {rfi_file.name} - Page {page_num} ---\n{page_text}\n"
         except Exception as e:
             st.error(f"Failed to read RFI: {e}")
 
-    if text.strip() or rfi_text:
-        with st.spinner("Checking..."):
+    if plan_text.strip() or rfi_text:
+        with st.spinner("Analyzing..."):
             try:
                 if rfi_text:
-                    # RFI MODE
-                    system_prompt = """You are a NZBC compliance engineer responding to council RFIs.
+                    # RFI CHALLENGE MODE
+                    system_prompt = """You are a NZBC compliance engineer defending the plans against council RFIs.
 
-ONLY address the RFI questions.
-
-For each RFI point:
-- RFI FILE + PAGE
-- Question
-- **SUGGESTED SOLUTION** (practical, cost-effective)
-- **ALTERNATIVE** if main fix is impractical (e.g., can't move building → fire-rate wall instead)
+FOR EACH RFI POINT:
+1. QUOTE THE RFI QUESTION
+2. SEARCH THE PLANS HARD — find the exact page and text that answers it
+3. IF ANSWERED: Say "ALREADY COMPLIANT" + quote the plan text + page
+4. IF NOT ANSWERED: Give practical fix + alternative
 
 Example:
-- RFI.pdf Page 1: Setback breach
-  - Question: Building 1.2m from boundary
-  - Suggested: Apply for resource consent variation
-  - Alternative: Fire-rate wall to FRL 60/60/60 (Clause C6)"""
+- RFI.pdf Page 1: "No E1 overflow shown"
+  - ALREADY COMPLIANT: "Overflow path shown on Page 5 (WD103): 'Secondary flow to boundary at 150mm freeboard'"
+  - Fix: Add detail to Page 5 if needed
+
+- RFI.pdf Page 2: "Setback breach"
+  - Issue: Building 1.2m from boundary
+  - Suggested: Apply for variation
+  - Alternative: Fire-rate wall to FRL 60/60/60 (C6)
+
+ONLY bullet points. NO summary."""
                 else:
                     # FULL COMPLIANCE MODE
                     system_prompt = """You are a NZBC compliance auditor.
@@ -85,21 +88,16 @@ For EACH non-compliant issue:
 - FILE + PAGE
 - Clause
 - Issue
-- **SUGGESTED FIX**
-- **ALTERNATIVE** if main fix is impractical
+- SUGGESTED FIX
+- ALTERNATIVE (if main fix is impractical)
 
-Example:
-- Plan.pdf Page 3: E1 overflow missing
-  - Clause: E1. Jahrhundert
-  - Issue: No secondary flow path
-  - Suggested: Add 150mm freeboard
-  - Alternative: Direct to council drain with consent"""
+ONLY bullet points."""
 
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": rfi_text + text if rfi_text else text}
+                        {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{plan_text}" if rfi_text else plan_text}
                     ]
                 )
                 st.success("Check Complete")
