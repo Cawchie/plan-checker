@@ -19,6 +19,8 @@ st.markdown("""
         border-radius: 8px;
         padding: 0.6rem 1.2rem;
         font-size: 1.1rem;
+        width: 100%;
+        margin: 0.5rem 0;
     }
     .stFileUploader > div > div {
         background-color: #e9ecef;
@@ -59,26 +61,33 @@ if not api_key:
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-# Step 1: Plans
-st.header("Step 1: Upload Plans")
+# Upload Plans
+st.header("Upload Plans (Required)")
 plan_files = st.file_uploader("Upload plans", type="pdf", accept_multiple_files=True, key="plans")
 
-# Step 2: Supporting
-st.header("Step 2: Upload Supporting Docs")
-support_files = st.file_uploader("Upload geotech, H1, etc.", type="pdf", accept_multiple_files=True, key="support")
+# Upload Supporting Docs
+st.header("Upload Supporting Docs (Geotech, H1, etc.)")
+support_files = st.file_uploader("Upload geotech, H1 calcs, etc.", type="pdf", accept_multiple_files=True, key="support")
 
-# Step 3: RFI
-st.header("Step 3: Upload RFI (Optional)")
+# Upload RFI
+st.header("Upload RFI (Optional)")
 rfi_file = st.file_uploader("Upload RFI document", type="pdf", accept_multiple_files=False, key="rfi")
 
-# Combine
+# Combine non-RFI files
 files = plan_files + support_files
 
-if files and st.button("Check Compliance"):
-    text = ""
-    rfi_text = ""
+# === BUTTONS ===
+col1, col2 = st.columns(2)
 
-    # Plans + Supporting
+with col1:
+    check_compliance = st.button("COMPLIANCE CHECK", type="primary")
+
+with col2:
+    check_rfi = st.button("RFI RESPONSE", type="secondary")
+
+# === COMPLIANCE CHECK ===
+if check_compliance and files:
+    text = ""
     for f in files:
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
@@ -89,23 +98,60 @@ if files and st.button("Check Compliance"):
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
-    # RFI
-    if rfi_file:
-        try:
-            reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
-            for page_num, page in enumerate(reader.pages, 1):
-                t = page.extract_text() or ""
-                if t.strip():
-                    rfi_text += f"--- RFI: {rfi_file.name} - Page {page_num} ---\n{t}\n"
-        except Exception as e:
-            st.error(f"Failed to read RFI: {e}")
-
-    if text.strip() or rfi_text:
-        with st.spinner("Analyzing documents..."):
+    if text.strip():
+        with st.spinner("Running Full Compliance Check..."):
             try:
-                if rfi_text:
-                    # RFI CHALLENGE MODE
-                    system_prompt = """You are a NZBC compliance engineer defending the plans against council RFIs.
+                response = client.chat.completions.create(
+                    model="grok-3",
+                    messages=[
+                        {"role": "system", "content": """You are a NZBC compliance auditor with 20 years experience.
+
+CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
+
+For EACH non-compliant item:
+- FILE NAME + PAGE NUMBER
+- Clause (e.g., E1.3.1)
+- Issue description
+- SUGGESTED FIX
+- ALTERNATIVE (if main fix is impractical)
+
+CHECK:
+E1, E2, E3, B1, B2, D1, D2, F1–F9, G1–G15, H1
+Council: height, coverage, setbacks, zoning
+Geotech: soil bearing, liquefaction
+H1: R-values, thermal bridging
+
+ONLY bullet points. NO summary."""},
+                        {"role": "user", "content": text}
+                    ]
+                )
+                st.success("Compliance Check Complete")
+                with st.container():
+                    st.markdown(f"<div class='report'>{response.choices[0].message.content}</div>", unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"API Error: {e}")
+    else:
+        st.warning("No text found in plans.")
+
+# === RFI RESPONSE ===
+if check_rfi and rfi_file:
+    rfi_text = ""
+    try:
+        reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
+        for page_num, page in enumerate(reader.pages, 1):
+            t = page.extract_text() or ""
+            if t.strip():
+                rfi_text += f"--- RFI: {rfi_file.name} - Page {page_num} ---\n{t}\n"
+    except Exception as e:
+        st.error(f"Failed to read RFI: {e}")
+
+    if rfi_text:
+        with st.spinner("Analyzing RFI..."):
+            try:
+                response = client.chat.completions.create(
+                    model="grok-3",
+                    messages=[
+                        {"role": "system", "content": """You are a NZBC compliance engineer defending the plans against council RFIs.
 
 FOR EACH RFI POINT:
 1. QUOTE THE RFI QUESTION
@@ -123,42 +169,17 @@ Example:
   - Suggested: Apply for resource consent variation
   - Alternative: Fire-rate wall to FRL 60/60/60 (C6)
 
-ONLY bullet points. NO summary."""
-                else:
-                    # FULL COMPLIANCE MODE
-                    system_prompt = """You are a NZBC compliance auditor with 20 years experience.
-
-CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
-
-For EACH non-compliant item:
-- FILE NAME + PAGE NUMBER
-- Clause (e.g., E1.3.1)
-- Issue description
-- SUGGESTED FIX
-- ALTERNATIVE (if main fix is impractical)
-
-CHECK:
-E1, E2, E3, B1, B2, D1, D2, F1–F9, G1–G15, H1
-Council: height, coverage, setbacks, zoning
-Geotech: soil bearing, liquefaction
-H1: R-values, thermal bridging
-
-ONLY bullet points. NO summary."""
-
-                response = client.chat.completions.create(
-                    model="grok-3",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{text}" if rfi_text else text}
+ONLY bullet points. NO summary."""},
+                        {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{text}" if files else rfi_text}
                     ]
                 )
-                st.success("Compliance Check Complete")
+                st.success("RFI Response Complete")
                 with st.container():
                     st.markdown(f"<div class='report'>{response.choices[0].message.content}</div>", unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"API Error: {e}")
     else:
-        st.warning("No text found in PDFs.")
+        st.warning("No text found in RFI.")
 
 # Footer
 st.markdown("<div class='footer'>xAI Plan Checker © 2025 | Powered by grok-3</div>", unsafe_allow_html=True)
