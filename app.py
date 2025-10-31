@@ -30,7 +30,7 @@ if files:
             st.error(f"Failed to read {f.name}")
 
     # Token limit
-    if len(text) > 30000:
+    if len(text) > 50000:
         st.error("Too much text! Upload 1-2 pages at a time.")
         st.stop()
 
