@@ -27,23 +27,45 @@ files = plan_files + support_files
 
 if files and st.button("Check Compliance"):
     text = ""
+    rfi_mode = False
+    rfi_content = ""
+
     for f in files:
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
             for page_num, page in enumerate(reader.pages, 1):
                 page_text = page.extract_text() or ""
                 if page_text.strip():
-                    text += f"--- {f.name} - Page {page_num} ---\n{page_text}\n"
+                    if "RFI" in f.name.upper() or "REQUEST FOR INFORMATION" in page_text.upper():
+                        rfi_mode = True
+                        rfi_content += f"--- RFI: {f.name} - Page {page_num} ---\n{page_text}\n"
+                    else:
+                        text += f"--- {f.name} - Page {page_num} ---\n{page_text}\n"
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
-    if text.strip():
-        with st.spinner("Full Compliance Check..."):
+    if text.strip() or rfi_content:
+        with st.spinner("Checking..."):
             try:
-                response = client.chat.completions.create(
-                    model="grok-3",
-                    messages=[
-                        {"role": "system", "content": """You are a NZBC compliance auditor with 20 years experience.
+                if rfi_mode:
+                    # RFI MODE: Only answer the RFI
+                    system_prompt = """You are a NZBC compliance engineer responding to council RFIs.
+
+ONLY address the RFI questions from the uploaded RFI document.
+
+For each RFI point:
+- RFI FILE + PAGE
+- Question
+- Direct answer with NZBC clause and fix
+- No other compliance checks
+
+Example:
+- RFI.pdf Page 1: E1 overflow path
+  - Question: No secondary flow path shown
+  - Answer: Add 150mm freeboard to tank (E1.3.1). See updated plan Page 3."""
+                else:
+                    # FULL COMPLIANCE MODE
+                    system_prompt = """You are a NZBC compliance auditor with 20 years experience.
 
 CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
 
@@ -53,27 +75,24 @@ For EACH non-compliant item:
 - Issue description
 - POTENTIAL FIX
 
-CHECK THESE CLAUSES:
+CHECK:
 E1, E2, E3, B1, B2, D1, D2, F1–F9, G1–G15, H1
-Council: height, coverage, setbacks, zoning, RFI responses
-Geotech: soil bearing, liquefaction, slope stability
-H1: R-values, thermal bridging, glazing U-values
+Council: height, coverage, setbacks, zoning
+Geotech: soil bearing, liquefaction
+H1: R-values, thermal bridging
 
-DO NOT SKIP ANYTHING. BE DETAILED.
+ONLY bullet points. NO summary."""
 
-Example:
-- 85 CAPE HILL.pdf Page 3: E1.3.1 non-compliant
-  - Clause: E1.3.1
-  - Issue: No overflow path for 1:100 year storm
-  - Fix: Add 150mm freeboard or secondary flow path to boundary
-
-ONLY bullet points. NO summary. NO "ready for more data"."""},
-                        {"role": "user", "content": text}
+                response = client.chat.completions.create(
+                    model="grok-3",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": rfi_content + text if rfi_mode else text}
                     ]
                 )
-                st.success("Compliance Check Complete")
+                st.success("Check Complete")
                 st.markdown(response.choices[0].message.content)
             except Exception as e:
                 st.error(f"API Error: {e}")
     else:
-        st.warning("No text found in PDFs.")
+        st.warning("No text found.")
