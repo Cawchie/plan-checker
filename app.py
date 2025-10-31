@@ -89,28 +89,30 @@ if check_compliance and files:
 
 CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
 
+MUST CHECK ALL CLAUSES:
+- E1: Surface water, drainage, overflow
+- E2: Flashing, cladding, junctions, penetrations
+- E3: Wet areas, waterproofing
+- B1: Structure, bearing, bracing
+- B2: Durability, corrosion
+- D1: Access routes, steps, handrails
+- F7: Smoke detectors, alarms
+- G4: Ventilation, airflow
+- G12: Water supplies, hot water
+- H1: R-values, thermal bridging, glazing
+- Council: height, coverage, setbacks, zoning
+
 LOOK FOR:
-- KEY/LEGEND items (smoke alarms, vents, fire doors, etc.)
-- SYMBOLS on the plan (SD, FD, V, H, etc.)
-- WEATHERTIGHTNESS DETAILS (flashing, cladding, junctions, penetrations)
+- KEY/LEGEND items
+- SYMBOLS (SD, FD, V, H, etc.)
+- WEATHERTIGHTNESS DETAILS
 
 For EACH non-compliant item:
 - FILE NAME + PAGE NUMBER
 - Clause (e.g., E2.3.2)
 - Issue description
 - SUGGESTED FIX
-- ALTERNATIVE (if main fix is impractical)
-
-E2 WEATHERTIGHTNESS CHECK:
-- Flashing: apron, head, sill, jamb, stop-ends
-- Cladding: cavity, direct fix, overlaps, fixings
-- Junctions: roof/wall, wall/foundation, window/wall
-- Penetrations: pipes, vents, meters, windows
-- Drainage: fall, overflow, scuppers, gutters
-
-LINK KEY TO PLAN:
-- If KEY says "SD = Smoke Detector" → Find SD symbols
-- If symbol missing → FLAG IT
+- ALTERNATIVE
 
 DO NOT SKIP ANYTHING. BE DETAILED.
 
