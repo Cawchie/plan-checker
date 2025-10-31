@@ -18,9 +18,7 @@ files = st.file_uploader("Upload PDFs (< 2MB)", type="pdf", accept_multiple_file
 if files:
     text = ""
     for f in files:
-        if f.size > 2_000_000:
-            st.error(f"{f.name} too big! Max 2MB")
-            continue
+        
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
             for page in reader.pages:
