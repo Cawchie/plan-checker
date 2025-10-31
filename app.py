@@ -13,37 +13,41 @@ if not api_key:
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-files = st.file_uploader("Upload PDFs (< 2MB)", type="pdf", accept_multiple_files=True)
+files = st.file_uploader("Upload Full Plans", type="pdf", accept_multiple_files=True)
 
 if files:
-    text = ""
+    all_issues = []
     for f in files:
-        
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
-            for page in reader.pages:
-                t = page.extract_text()
-                if t:
-                    text += t + "\n"
-            text += f"\n--- END OF {f.name} ---\n"
-        except:
-            st.error(f"Failed to read {f.name}")
+            for page_num, page in enumerate(reader.pages, 1):
+                text = page.extract_text() or ""
+                if not text.strip():
+                    continue
 
-    # Token limit
-    if len(text) > 50000:
-        st.error("Too much text! Upload 1-2 pages at a time.")
-        st.stop()
+                # Add page header
+                chunk = f"--- {f.name} - Page {page_num} ---\n{text}"
 
-    with st.spinner("Checking..."):
-        try:
-            resp = client.chat.completions.create(
-                model="grok-3-mini",  # 32K tokens
-                messages=[
-                    {"role": "system", "content": "You are a NZBC expert. Give ONLY bullet points for non-compliant issues with PAGE NUMBERS. Example: '- Page 3: E1 missing'"},
-                    {"role": "user", "content": text}
-                ]
-            )
-            st.success("Done!")
-            st.markdown(resp.choices[0].message.content)
+                with st.spinner(f"Checking {f.name} Page {page_num}..."):
+                    try:
+                        resp = client.chat.completions.create(
+                            model="grok-3-mini",
+                            messages=[
+                                {"role": "system", "content": "You are a NZBC expert. Give ONLY bullet points for non-compliant issues with PAGE NUMBERS. Example: '- Page {page_num}: E1 missing'"},
+                                {"role": "user", "content": chunk}
+                            ]
+                        )
+                        issues = resp.choices[0].message.content.strip()
+                        if issues:
+                            all_issues.append(issues)
+                    except Exception as e:
+                        st.error(f"Error on {f.name} Page {page_num}: {e}")
+
         except Exception as e:
-            st.error(f"API Error: {e}")
+            st.error(f"Failed to read {f.name}: {e}")
+
+    if all_issues:
+        st.success("Full Compliance Check Complete")
+        st.markdown("\n\n".join(all_issues))
+    else:
+        st.success("No non-compliant issues found!")
