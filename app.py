@@ -61,16 +61,16 @@ if not api_key:
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-# Upload Plans
-st.header("Upload Plans (Required)")
+# Step 1: Upload Plans
+st.header("Step 1: Upload Plans")
 plan_files = st.file_uploader("Upload plans", type="pdf", accept_multiple_files=True, key="plans")
 
-# Upload Supporting Docs
-st.header("Upload Supporting Docs (Geotech, H1, etc.)")
+# Step 2: Upload Supporting Docs
+st.header("Step 2: Upload Supporting Docs (Geotech, H1, etc.)")
 support_files = st.file_uploader("Upload geotech, H1 calcs, etc.", type="pdf", accept_multiple_files=True, key="support")
 
-# Upload RFI
-st.header("Upload RFI (Optional)")
+# Step 3: Upload RFI (SEPARATE)
+st.header("Step 3: Upload RFI (Council Request)")
 rfi_file = st.file_uploader("Upload RFI document", type="pdf", accept_multiple_files=False, key="rfi")
 
 # Combine non-RFI files
