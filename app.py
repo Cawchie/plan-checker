@@ -85,9 +85,12 @@ with col1:
 with col2:
     check_rfi = st.button("RFI RESPONSE", type="secondary")
 
-# === COMPLIANCE CHECK ===
-if check_compliance and files:
-    text = ""
+# === EXTRACT TEXT ONCE ===
+text = ""
+rfi_text = ""
+
+if files or rfi_file:
+    # Extract plans + support
     for f in files:
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
@@ -98,6 +101,19 @@ if check_compliance and files:
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
+    # Extract RFI
+    if rfi_file:
+        try:
+            reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
+            for page_num, page in enumerate(reader.pages, 1):
+                t = page.extract_text() or ""
+                if t.strip():
+                    rfi_text += f"--- RFI: {rfi_file.name} - Page {page_num} ---\n{t}\n"
+        except Exception as e:
+            st.error(f"Failed to read RFI: {e}")
+
+# === COMPLIANCE CHECK ===
+if check_compliance and files:
     if text.strip():
         with st.spinner("Running Full Compliance Check..."):
             try:
@@ -135,16 +151,6 @@ ONLY bullet points. NO summary."""},
 
 # === RFI RESPONSE ===
 if check_rfi and rfi_file:
-    rfi_text = ""
-    try:
-        reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
-        for page_num, page in enumerate(reader.pages, 1):
-            t = page.extract_text() or ""
-            if t.strip():
-                rfi_text += f"--- RFI: {rfi_file.name} - Page {page_num} ---\n{t}\n"
-    except Exception as e:
-        st.error(f"Failed to read RFI: {e}")
-
     if rfi_text:
         with st.spinner("Analyzing RFI..."):
             try:
@@ -170,7 +176,7 @@ Example:
   - Alternative: Fire-rate wall to FRL 60/60/60 (C6)
 
 ONLY bullet points. NO summary."""},
-                        {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{text}" if files else rfi_text}
+                        {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{text}"}
                     ]
                 )
                 st.success("RFI Response Complete")
