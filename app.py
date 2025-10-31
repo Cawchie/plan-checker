@@ -13,6 +13,7 @@ st.markdown("""
     h1, h2, h3 { color: #343a40; font-family: 'Helvetica', sans-serif; font-weight: 600; }
     .report { background-color: #fff3cd; padding: 1.2rem; border-left: 6px solid #ffc107; border-radius: 8px; margin: 1.5rem 0; font-size: 1.05rem; line-height: 1.6; }
     .footer { text-align: center; margin-top: 3rem; color: #6c757d; font-size: 0.9rem; }
+    .saved-job { background-color: #e7f3ff; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -26,15 +27,17 @@ if not api_key:
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-# Upload Plans
+# === SAVE JOBS (SESSION STATE) ===
+if 'saved_jobs' not in st.session_state:
+    st.session_state.saved_jobs = {}
+
+# === UPLOADS ===
 st.header("Upload Plans (Required)")
 plan_files = st.file_uploader("Upload plans", type="pdf", accept_multiple_files=True, key="plans")
 
-# Upload Supporting Docs
 st.header("Upload Supporting Docs (Geotech, H1, etc.)")
 support_files = st.file_uploader("Upload geotech, H1 calcs, etc.", type="pdf", accept_multiple_files=True, key="support")
 
-# Upload RFI
 st.header("Upload RFI (Optional)")
 rfi_file = st.file_uploader("Upload RFI document", type="pdf", accept_multiple_files=False, key="rfi")
 
@@ -42,7 +45,7 @@ rfi_file = st.file_uploader("Upload RFI document", type="pdf", accept_multiple_f
 files = plan_files + support_files
 
 # === BUTTONS ===
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     check_compliance = st.button("COMPLIANCE CHECK", type="primary")
@@ -50,10 +53,13 @@ with col1:
 with col2:
     check_rfi = st.button("RFI RESPONSE", type="secondary")
 
+with col3:
+    save_job = st.button("SAVE JOB", type="secondary")
+
 # === EXTRACT TEXT ONCE ===
-plan_text = ""
-geotech_text = ""
+text = ""
 rfi_text = ""
+geotech_text = ""
 
 if files or rfi_file:
     # Extract plans + support
@@ -66,7 +72,7 @@ if files or rfi_file:
                     if any(keyword in f.name.lower() for keyword in ["geotech", "geotechnical", "soil"]):
                         geotech_text += f"--- GEOTECH: {f.name} - Page {page_num} ---\n{t}\n"
                     else:
-                        plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
+                        text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
@@ -81,16 +87,38 @@ if files or rfi_file:
         except Exception as e:
             st.error(f"Failed to read RFI: {e}")
 
+# === SAVE JOB ===
+if save_job and files:
+    job_name = st.text_input("Job Name (e.g., 146 Martyn Wright)", key="save_job_name")
+    if job_name and st.button("Confirm Save"):
+        st.session_state.saved_jobs[job_name] = {
+            "files": files,
+            "text": text,
+            "rfi_text": rfi_text,
+            "geotech_text": geotech_text
+        }
+        st.success(f"Job '{job_name}' saved!")
+
+# === LOAD JOB ===
+if st.session_state.saved_jobs:
+    st.header("Saved Jobs")
+    load_job = st.selectbox("Load a saved job", [""] + list(st.session_state.saved_jobs.keys()))
+    if load_job:
+        job = st.session_state.saved_jobs[load_job]
+        text = job["text"]
+        rfi_text = job["rfi_text"]
+        geotech_text = job["geotech_text"]
+        st.markdown(f"<div class='saved-job'><strong>{load_job}</strong> loaded. Use buttons below.</div>", unsafe_allow_html=True)
+
 # === COMPLIANCE CHECK ===
-if check_compliance and files:
-    if plan_text.strip():
+if check_compliance and (files or load_job):
+    if text.strip():
         with st.spinner("Running Full Compliance Check..."):
             try:
-                # Build full context
                 full_context = ""
                 if geotech_text:
                     full_context += f"GEOTECH REPORT:\n{geotech_text}\n"
-                full_context += f"PLANS & CALCS:\n{plan_text}"
+                full_context += f"PLANS & CALCS:\n{text}"
 
                 response = client.chat.completions.create(
                     model="grok-3",
@@ -119,13 +147,6 @@ Weathertightness: flashing, cladding, junctions
 
 DO NOT FLAG GEOTECH IF REPORT IS UPLOADED AND MATCHES.
 
-Example:
-- CALCS.pdf Page 2: B1.3.1 geotech
-  - Clause: B1.3.1
-  - Issue: Assumed Cu=70 kPa, but geotech report shows Cu=60 kPa
-  - Suggested: Update calcs to Cu=60 kPa
-  - Alternative: Add soil test results to confirm 70 kPa
-
 ONLY bullet points. NO summary."""},
                         {"role": "user", "content": full_context}
                     ]
@@ -139,7 +160,7 @@ ONLY bullet points. NO summary."""},
         st.warning("No text found in plans.")
 
 # === RFI RESPONSE ===
-if check_rfi and rfi_file:
+if check_rfi and (rfi_file or load_job):
     if rfi_text:
         with st.spinner("Analyzing RFI..."):
             try:
@@ -154,18 +175,8 @@ FOR EACH RFI POINT:
 3. IF ANSWERED: Say "ALREADY COMPLIANT" + quote the plan text + page
 4. IF NOT ANSWERED: Give practical fix + alternative
 
-Example:
-- RFI.pdf Page 1: "No E1 overflow shown"
-  - ALREADY COMPLIANT: "Overflow path shown on Page 5 (WD103): 'Secondary flow to boundary at 150mm freeboard'"
-  - Fix: Add detail to Page 5 if needed
-
-- RFI.pdf Page 2: "Setback breach"
-  - Issue: Building 1.2m from boundary
-  - Suggested: Apply for resource consent variation
-  - Alternative: Fire-rate wall to FRL 60/60/60 (C6)
-
 ONLY bullet points. NO summary."""},
-                        {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{plan_text}"}
+                        {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{text}"}
                     ]
                 )
                 st.success("RFI Response Complete")
