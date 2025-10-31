@@ -86,6 +86,12 @@ if check_compliance and files:
     if plan_text.strip():
         with st.spinner("Running Full Compliance Check..."):
             try:
+                # Build full context
+                full_context = ""
+                if geotech_text:
+                    full_context += f"GEOTECH REPORT:\n{geotech_text}\n"
+                full_context += f"PLANS & CALCS:\n{plan_text}"
+
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
@@ -94,8 +100,8 @@ if check_compliance and files:
 CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
 
 GEOTECH INTEGRATION (CRITICAL):
-- IF GEOTECH REPORT UPLOADED: CROSS-REFERENCE ALL structural calcs (B1.3.1)
-- Verify soil bearing (Cu=70 kPa), liquefaction, slope stability, test methods
+- GEOTECH REPORT IS UPLOADED — USE IT FOR ALL B1.3.1 CHECKS
+- Verify soil bearing (Cu=70 kPa), liquefaction, slope stability
 - IF GEOTECH MATCHES CALCS: CLEAR THE FLAG
 - IF NOT: FLAG + quote geotech data
 
@@ -111,6 +117,8 @@ E1, E2, E3, B1, B2, D1, D2, F1–F9, G1–G15, H1
 Council: height, coverage, setbacks, zoning
 Weathertightness: flashing, cladding, junctions
 
+DO NOT FLAG GEOTECH IF REPORT IS UPLOADED AND MATCHES.
+
 Example:
 - CALCS.pdf Page 2: B1.3.1 geotech
   - Clause: B1.3.1
@@ -118,14 +126,8 @@ Example:
   - Suggested: Update calcs to Cu=60 kPa
   - Alternative: Add soil test results to confirm 70 kPa
 
-- PLAN.pdf Page 6: E2.3.2 flashing
-  - Clause: E2.3.2
-  - Issue: No head flashing at window
-  - Suggested: Add 150mm head flashing with stop-end
-  - Alternative: Use sealant with 10-year warranty
-
 ONLY bullet points. NO summary."""},
-                        {"role": "user", "content": f"GEOTECH REPORT:\n{geotech_text}\n\nPLANS & CALCS:\n{plan_text}"}
+                        {"role": "user", "content": full_context}
                     ]
                 )
                 st.success("Compliance Check Complete")
