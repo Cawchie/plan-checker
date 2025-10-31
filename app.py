@@ -51,9 +51,9 @@ with col2:
     check_rfi = st.button("RFI RESPONSE", type="secondary")
 
 # === EXTRACT TEXT ONCE ===
-text = ""
-rfi_text = ""
+plan_text = ""
 geotech_text = ""
+rfi_text = ""
 
 if files or rfi_file:
     # Extract plans + support
@@ -63,10 +63,10 @@ if files or rfi_file:
             for page_num, page in enumerate(reader.pages, 1):
                 t = page.extract_text() or ""
                 if t.strip():
-                    if "geotech" in f.name.lower() or "geotechnical" in f.name.lower():
+                    if any(keyword in f.name.lower() for keyword in ["geotech", "geotechnical", "soil"]):
                         geotech_text += f"--- GEOTECH: {f.name} - Page {page_num} ---\n{t}\n"
                     else:
-                        text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
+                        plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
@@ -83,7 +83,7 @@ if files or rfi_file:
 
 # === COMPLIANCE CHECK ===
 if check_compliance and files:
-    if text.strip():
+    if plan_text.strip():
         with st.spinner("Running Full Compliance Check..."):
             try:
                 response = client.chat.completions.create(
@@ -93,52 +93,39 @@ if check_compliance and files:
 
 CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
 
-LOOK FOR:
-- KEY/LEGEND items (smoke alarms, vents, fire doors, etc.)
-- SYMBOLS on the plan (SD, FD, V, H, etc.)
-- WEATHERTIGHTNESS DETAILS (flashing, cladding, junctions, penetrations)
-
-GEOTECH INTEGRATION:
-- If geotech report uploaded, CROSS-REFERENCE with structural calcs (B1.3.1)
-- Verify soil bearing (Cu=70 kPa), liquefaction, slope stability
-- If assumptions match report, CLEAR them
-- If not, FLAG with geotech details
+GEOTECH INTEGRATION (CRITICAL):
+- IF GEOTECH REPORT UPLOADED: CROSS-REFERENCE ALL structural calcs (B1.3.1)
+- Verify soil bearing (Cu=70 kPa), liquefaction, slope stability, test methods
+- IF GEOTECH MATCHES CALCS: CLEAR THE FLAG
+- IF NOT: FLAG + quote geotech data
 
 For EACH non-compliant item:
 - FILE NAME + PAGE NUMBER
-- Clause (e.g., E2.3.3)
+- Clause (e.g., B1.3.1)
 - Issue description
 - SUGGESTED FIX
 - ALTERNATIVE (if main fix is impractical)
 
-E2 WEATHERTIGHTNESS CHECK:
-- Flashing: apron, head, sill, jamb, stop-ends
-- Cladding: cavity, direct fix, overlaps, fixings
-- Junctions: roof/wall, wall/foundation, window/wall
-- Penetrations: pipes, vents, meters, windows
-- Drainage: fall, overflow, scuppers, gutters
-
-LINK KEY TO PLAN:
-- If KEY says "SD = Smoke Detector" → Find SD symbols
-- If symbol missing → FLAG IT
-
-DO NOT SKIP ANYTHING. BE DETAILED.
+CHECK:
+E1, E2, E3, B1, B2, D1, D2, F1–F9, G1–G15, H1
+Council: height, coverage, setbacks, zoning
+Weathertightness: flashing, cladding, junctions
 
 Example:
-- PLAN.pdf Page 6: E2.3.3 flashing
-  - Clause: E2.3.3
-  - Issue: No sill flashing at door
-  - Suggested: Add 50mm sill flashing with upturn
-  - Alternative: Use pre-formed sill with sealant
-
 - CALCS.pdf Page 2: B1.3.1 geotech
   - Clause: B1.3.1
-  - Issue: Assumed Cu=70 kPa not in geotech report
-  - Suggested: Update to report value (Cu=60 kPa)
-  - Alternative: Add soil test results
+  - Issue: Assumed Cu=70 kPa, but geotech report shows Cu=60 kPa
+  - Suggested: Update calcs to Cu=60 kPa
+  - Alternative: Add soil test results to confirm 70 kPa
+
+- PLAN.pdf Page 6: E2.3.2 flashing
+  - Clause: E2.3.2
+  - Issue: No head flashing at window
+  - Suggested: Add 150mm head flashing with stop-end
+  - Alternative: Use sealant with 10-year warranty
 
 ONLY bullet points. NO summary."""},
-                        {"role": "user", "content": geotech_text + text}
+                        {"role": "user", "content": f"GEOTECH REPORT:\n{geotech_text}\n\nPLANS & CALCS:\n{plan_text}"}
                     ]
                 )
                 st.success("Compliance Check Complete")
@@ -176,7 +163,7 @@ Example:
   - Alternative: Fire-rate wall to FRL 60/60/60 (C6)
 
 ONLY bullet points. NO summary."""},
-                        {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{text}"}
+                        {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{plan_text}"}
                     ]
                 )
                 st.success("RFI Response Complete")
