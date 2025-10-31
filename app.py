@@ -92,13 +92,21 @@ CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
 LOOK FOR:
 - KEY/LEGEND items (smoke alarms, vents, fire doors, etc.)
 - SYMBOLS on the plan (SD, FD, V, H, etc.)
+- WEATHERTIGHTNESS DETAILS (flashing, cladding, junctions, penetrations)
 
 For EACH non-compliant item:
 - FILE NAME + PAGE NUMBER
-- Clause (e.g., E1.3.1)
+- Clause (e.g., E2.3.2)
 - Issue description
 - SUGGESTED FIX
 - ALTERNATIVE (if main fix is impractical)
+
+E2 WEATHERTIGHTNESS CHECK:
+- Flashing: apron, head, sill, jamb, stop-ends
+- Cladding: cavity, direct fix, overlaps, fixings
+- Junctions: roof/wall, wall/foundation, window/wall
+- Penetrations: pipes, vents, meters, windows
+- Drainage: fall, overflow, scuppers, gutters
 
 LINK KEY TO PLAN:
 - If KEY says "SD = Smoke Detector" → Find SD symbols
@@ -107,11 +115,11 @@ LINK KEY TO PLAN:
 DO NOT SKIP ANYTHING. BE DETAILED.
 
 Example:
-- PLAN.pdf Page 6: F7.3.1 smoke detectors
-  - Clause: F7.3.1
-  - Issue: KEY says "SD required" but no SD in bedrooms
-  - Suggested: Add SD within 3m of bedroom doors
-  - Alternative: Note "to be installed per F7/AS1"
+- PLAN.pdf Page 6: E2.3.2 flashing
+  - Clause: E2.3.2
+  - Issue: No head flashing at window
+  - Suggested: Add 150mm head flashing with stop-end
+  - Alternative: Use sealant with 10-year warranty
 
 ONLY bullet points. NO summary."""},
                         {"role": "user", "content": text}
