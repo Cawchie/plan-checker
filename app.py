@@ -6,53 +6,46 @@ import os
 
 st.title("xAI Plan Checker")
 
-# Get key from secret
 api_key = os.environ.get("XAI_API_KEY")
 if not api_key:
-    st.error("API key missing! Add XAI_API_KEY in Settings.")
+    st.error("API key missing!")
     st.stop()
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-# Upload files
-files = st.file_uploader("Upload PDFs", type="pdf", accept_multiple_files=True)
+files = st.file_uploader("Upload PDFs (< 2MB)", type="pdf", accept_multiple_files=True)
 
 if files:
     text = ""
     for f in files:
+        if f.size > 2_000_000:
+            st.error(f"{f.name} too big! Max 2MB")
+            continue
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
             for page in reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n"
+                t = page.extract_text()
+                if t:
+                    text += t + "\n"
             text += f"\n--- END OF {f.name} ---\n"
+        except:
+            st.error(f"Failed to read {f.name}")
+
+    # Token limit
+    if len(text) > 30000:
+        st.error("Too much text! Upload 1-2 pages at a time.")
+        st.stop()
+
+    with st.spinner("Checking..."):
+        try:
+            resp = client.chat.completions.create(
+                model="grok-3-mini",  # 32K tokens
+                messages=[
+                    {"role": "system", "content": "You are a NZBC expert. Give ONLY bullet points for non-compliant issues with PAGE NUMBERS. Example: '- Page 3: E1 missing'"},
+                    {"role": "user", "content": text}
+                ]
+            )
+            st.success("Done!")
+            st.markdown(resp.choices[0].message.content)
         except Exception as e:
-            st.error(f"Error reading {f.name}: {e}")
-
-    if text.strip():
-        with st.spinner("Checking compliance..."):
-            try:
-                response = client.chat.completions.create(
-                    model="grok-3",
-                    messages=[
-                        {"role": "system", "content": """COMPLIANCE CHECK MODE ONLY
-
-You are a New Zealand Building Code expert. DO NOT LEARN — ONLY CHECK COMPLIANCE.
-
-For the uploaded plans:
-- Check against ALL known NZBC clauses (E1, D1, B1, H1, etc.)
-- Check against council rules, RFIs, and past responses
-- Give ONLY bullet points for NON-COMPLIANT issues
-- Include PAGE NUMBERS
-- No learning summary, no progress %, no "ready for more data"
-- Example: "- Page 5: E1 surface water missing (Clause E1.3.1)"""},
-                        {"role": "user", "content": text}
-                    ]
-                )
-                st.success("Compliance Check Complete")
-                st.markdown(response.choices[0].message.content)
-            except Exception as e:
-                st.error(f"API Error: {e}")
-    else:
-        st.warning("No readable text in the PDF(s).")
+            st.error(f"API Error: {e}")
