@@ -13,25 +13,15 @@ if not api_key:
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-# Session state for files
-if 'all_files' not in st.session_state:
-    st.session_state.all_files = []
-
-# Step 1: Upload plans
 st.header("Step 1: Upload Plans")
-plan_files = st.file_uploader("Upload architectural/structural plans", type="pdf", accept_multiple_files=True, key="plans")
+plan_files = st.file_uploader("Upload plans", type="pdf", accept_multiple_files=True, key="plans")
 
-# Step 2: Upload supporting docs
-st.header("Step 2: Upload Supporting Docs (Geotech, H1, etc.)")
-support_files = st.file_uploader("Upload geotech, H1 calcs, RFIs, etc.", type="pdf", accept_multiple_files=True, key="support")
+st.header("Step 2: Upload Supporting Docs")
+support_files = st.file_uploader("Upload geotech, H1, RFIs", type="pdf", accept_multiple_files=True, key="support")
 
-# Combine files
 files = plan_files + support_files
-if files:
-    st.session_state.all_files = files
 
-if st.button("Check Compliance") or st.session_state.all_files:
-    files = st.session_state.all_files
+if files and st.button("Check Compliance"):
     text = ""
     for f in files:
         try:
@@ -44,12 +34,24 @@ if st.button("Check Compliance") or st.session_state.all_files:
             st.error(f"Failed to read {f.name}")
 
     if text.strip():
-        with st.spinner("Checking all documents..."):
+        with st.spinner("Full Compliance Check..."):
             try:
                 response = client.chat.completions.create(
-                    model="grok-3-mini",
+                    model="grok-3",
                     messages=[
-                        {"role": "system", "content": "You are a NZBC expert. Check ALL uploaded files (plans + geotech + H1). Give ONLY bullet points for non-compliant issues with FILE NAME + PAGE NUMBER. Example: '- THRUPP.pdf Page 3: E1 missing'"},
+                        {"role": "system", "content": """You are a NZBC expert. For every non-compliant issue:
+- FILE NAME + PAGE NUMBER
+- Clause (e.g., E1.3.1)
+- Issue description
+- POTENTIAL FIX (be specific)
+
+Example:
+- 85 CAPE HILL.pdf Page 1: H6.5 non-compliant for HIRB G (building height 90.59m exceeds limit)
+  - Clause: H6.5
+  - Issue: Height exceeds HIRB G limit of 90m
+  - Fix: Reduce height to 89.9m or apply for variation with engineer justification
+
+ONLY bullet points. NO summary."""},
                         {"role": "user", "content": text}
                     ]
                 )
@@ -58,4 +60,4 @@ if st.button("Check Compliance") or st.session_state.all_files:
             except Exception as e:
                 st.error(f"API Error: {e}")
     else:
-        st.warning("No text found in PDFs.")
+        st.warning("No text found.")
