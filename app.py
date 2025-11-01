@@ -57,9 +57,7 @@ plan_text = ""
 h1_data = None
 rfi_text = ""
 
-# Only extract if files are uploaded
 if plan_files or support_files or rfi_file:
-    # Extract plans + support
     for f in (plan_files or []) + (support_files or []):
         if f.name.lower().endswith('.xlsx'):
             try:
@@ -77,7 +75,6 @@ if plan_files or support_files or rfi_file:
             except Exception as e:
                 st.error(f"Failed to read {f.name}: {e}")
 
-    # Extract RFI
     if rfi_file:
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
@@ -88,26 +85,14 @@ if plan_files or support_files or rfi_file:
         except Exception as e:
             st.error(f"Failed to read RFI: {e}")
 
-# === H1 CALCULATION (SEPARATE BUTTON) ===
+# === H1 CALCULATION ===
 if calc_h1 and h1_data:
     with st.spinner("Calculating H1 Compliance..."):
         try:
-            # Parse sheets
             project_details = h1_data.parse("Project Details")
-            slab_floors = h1_data.parse("Slab Floors")
-            other_floors = h1_data.parse("Other Floors")
-            roof = h1_data.parse("Roof")
-            skylights = h1_data.parse("Skylights")
-            walls = h1_data.parse("Walls")
-            glazing = h1_data.parse("Glazing (walls & doors)")
-            doors = h1_data.parse("Doors (opaque)")
-            results = h1_data.parse("Results")
-
-            # Extract key values
             territorial_authority = project_details.iloc[0, 14] if len(project_details) > 0 else "Unknown"
             climate_zone = project_details.iloc[0, 15] if len(project_details) > 0 else "Unknown"
 
-            # Function to extract R-values
             def extract_r_values(df, r_col=2):
                 r_vals = []
                 for i in range(len(df)):
@@ -119,43 +104,27 @@ if calc_h1 and h1_data:
                             pass
                 return r_vals
 
-            slab_r = extract_r_values(slab_floors)
-            other_r = extract_r_values(other_floors)
-            roof_r = extract_r_values(roof)
-            skylights_r = extract_r_values(skylights)
-            walls_r = extract_r_values(walls)
-            glazing_r = extract_r_values(glazing)
-            doors_r = extract_r_values(doors)
+            slab_r = extract_r_values(h1_data.parse("Slab Floors"))
+            other_r = extract_r_values(h1_data.parse("Other Floors"))
+            roof_r = extract_r_values(h1_data.parse("Roof"))
+            walls_r = extract_r_values(h1_data.parse("Walls"))
 
-            # Results summary
-            result_summary = ""
-            for i in range(len(results)):
-                row = results.iloc[i]
-                if len(row) > 1 and pd.notna(row[1]):
-                    result_summary += f"{row[0] if pd.notna(row[0]) else ''}: {row[1]}\n"
-
-            # Display
             st.success("H1 Calculation Complete")
             with st.container():
                 st.markdown(f"""
                 <div class='h1-calc'>
                 <strong>Project:</strong> {territorial_authority}<br>
                 <strong>Climate Zone:</strong> {climate_zone}<br><br>
-                <strong>Slab Floors R-Values:</strong> {slab_r}<br>
-                <strong>Other Floors R-Values:</strong> {other_r}<br>
-                <strong>Roof R-Values:</strong> {roof_r}<br>
-                <strong>Skylights R-Values:</strong> {skylights_r}<br>
-                <strong>Walls R-Values:</strong> {walls_r}<br>
-                <strong>Glazing R-Values:</strong> {glazing_r}<br>
-                <strong>Doors R-Values:</strong> {doors_r}<br><br>
-                <strong>Results Summary:</strong><br>
-                {result_summary.replace(chr(10), '<br>')}
+                <strong>Slab R:</strong> {slab_r}<br>
+                <strong>Other Floors R:</strong> {other_r}<br>
+                <strong>Roof R:</strong> {roof_r}<br>
+                <strong>Walls R:</strong> {walls_r}<br>
                 </div>
                 """, unsafe_allow_html=True)
         except Exception as e:
             st.error(f"H1 Error: {e}")
 elif calc_h1:
-    st.warning("No H1 Excel found in supporting docs.")
+    st.warning("No H1 Excel found.")
 
 # === COMPLIANCE CHECK ===
 if check_compliance and (plan_files or support_files):
@@ -165,29 +134,29 @@ if check_compliance and (plan_files or support_files):
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
-                        {"role": "system", "content": """You are a NZBC compliance auditor with 20 years experience.
+                        {"role": "system", "content": """You are a NZBC E2 weathertightness expert.
 
-CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
+CHECK EVERY PAGE FOR MISSING E2 DETAILS.
 
 LOOK FOR:
-- KEY/LEGEND items (smoke alarms, vents, fire doors, etc.)
-- SYMBOLS on the plan (SD, FD, V, H, etc.)
+- 135° corners
+- Window/door penetrations
+- Pipe penetrations
+- Roof/wall junctions
+- Base details
+- Flashing (head, sill, jamb)
 
-For EACH non-compliant item:
-- FILE NAME + PAGE NUMBER
-- Clause (e.g., E1.3.1)
-- Issue description
-- SUGGESTED FIX
-- ALTERNATIVE (if main fix is impractical)
-
-DO NOT SKIP ANYTHING. BE DETAILED.
+FLAG IF:
+- 135° corner → No detail
+- Window → No head flashing
+- Pipe → No flashing tape
 
 Example:
-- PLAN.pdf Page 6: F7.3.1 smoke detectors
-  - Clause: F7.3.1
-  - Issue: KEY says "SD required" but no SD in bedrooms
-  - Suggested: Add SD within 3m of bedroom doors
-  - Alternative: Note "to be installed per F7/AS1"
+- PLAN.pdf Page 6: E2.3.2 135° corner
+  - Clause: E2.3.2
+  - Issue: 135° corner at north-east wall, no detail
+  - Suggested: Add 135° flashing detail with 150mm upstand
+  - Alternative: Use pre-formed 135° flashing
 
 ONLY bullet points. NO summary."""},
                         {"role": "user", "content": plan_text}
@@ -209,25 +178,11 @@ if check_rfi and rfi_file:
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
-                        {"role": "system", "content": """You are a NZBC compliance engineer defending the plans against council RFIs.
+                        {"role": "system", "content": """You are a NZBC compliance engineer.
 
-FOR EACH RFI POINT:
-1. QUOTE THE RFI QUESTION
-2. SEARCH THE PLANS HARD — find the exact page and text that answers it
-3. IF ANSWERED: Say "ALREADY COMPLIANT" + quote the plan text + page
-4. IF NOT ANSWERED: Give practical fix + alternative
+ANSWER RFI USING PLANS.
 
-Example:
-- RFI.pdf Page 1: "No E1 overflow shown"
-  - ALREADY COMPLIANT: "Overflow path shown on Page 5 (WD103): 'Secondary flow to boundary at 150mm freeboard'"
-  - Fix: Add detail to Page 5 if needed
-
-- RFI.pdf Page 2: "Setback breach"
-  - Issue: Building 1.2m from boundary
-  - Suggested: Apply for resource consent variation
-  - Alternative: Fire-rate wall to FRL 60/60/60 (C6)
-
-ONLY bullet points. NO summary."""},
+ONLY bullet points."""},
                         {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{plan_text}"}
                     ]
                 )
