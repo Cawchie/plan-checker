@@ -3,6 +3,8 @@ from openai import OpenAI
 import PyPDF2
 import io
 import os
+import pandas as pd
+import numpy as np
 
 # === PRO LOOK (CSS) ===
 st.markdown("""
@@ -33,14 +35,11 @@ plan_files = st.file_uploader("Upload plans", type="pdf", accept_multiple_files=
 
 # Upload Supporting Docs
 st.header("Upload Supporting Docs (Geotech, H1, etc.)")
-support_files = st.file_uploader("Upload geotech, H1 calcs, etc.", type="pdf", accept_multiple_files=True, key="support")
+support_files = st.file_uploader("Upload geotech, H1 calcs, etc.", type=["pdf", "xlsx"], accept_multiple_files=True, key="support")
 
 # Upload RFI
 st.header("Upload RFI (Optional)")
 rfi_file = st.file_uploader("Upload RFI document", type="pdf", accept_multiple_files=False, key="rfi")
-
-# Combine non-RFI files
-files = plan_files + support_files
 
 # === BUTTONS ===
 col1, col2, col3 = st.columns(3)
@@ -56,25 +55,27 @@ with col3:
 
 # === EXTRACT TEXT ONCE ===
 plan_text = ""
-h1_text = ""
+h1_data = None
 rfi_text = ""
 
+if support_files:
+    for f in support_files:
+        if f.name.lower().endswith('.xlsx'):
+            # Parse Excel for H1
+            h1_data = pd.ExcelFile(io.BytesIO(f.getvalue()))
+            st.success(f"H1 Excel {f.name} loaded.")
+
 if files or rfi_file:
-    # Extract plans + support
     for f in files:
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
             for page_num, page in enumerate(reader.pages, 1):
                 t = page.extract_text() or ""
                 if t.strip():
-                    if any(keyword in f.name.lower() for keyword in ["h1", "energy"]):
-                        h1_text += f"--- H1: {f.name} - Page {page_num} ---\n{t}\n"
-                    else:
-                        plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
+                    plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
-    # Extract RFI
     if rfi_file:
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
@@ -86,84 +87,108 @@ if files or rfi_file:
             st.error(f"Failed to read RFI: {e}")
 
 # === H1 CALCULATION (SEPARATE BUTTON) ===
-if calc_h1 and files:
-    if plan_text.strip() or h1_text.strip():
-        with st.spinner("Calculating H1 Compliance..."):
-            try:
-                full_context = ""
-                if h1_text:
-                    full_context += f"H1 CALCS:\n{h1_text}\n"
-                full_context += f"PLANS:\n{plan_text}"
+if calc_h1 and h1_data:
+    with st.spinner("Calculating H1 Compliance..."):
+        try:
+            # Parse sheets
+            project_details = h1_data.parse("Project Details")
+            slab_floors = h1_data.parse("Slab Floors")
+            other_floors = h1_data.parse("Other Floors")
+            roof = h1_data.parse("Roof")
+            skylights = h1_data.parse("Skylights")
+            walls = h1_data.parse("Walls")
+            glazing = h1_data.parse("Glazing (walls & doors)")
+            doors = h1_data.parse("Doors (opaque)")
+            results = h1_data.parse("Results")
 
-                response = client.chat.completions.create(
-                    model="grok-3",
-                    messages=[
-                        {"role": "system", "content": """You are an H1 energy efficiency expert.
+            # Extract key values
+            territorial_authority = project_details.iloc[0, 14] if len(project_details) > 0 else "Unknown"
+            climate_zone = project_details.iloc[0, 15] if len(project_details) > 0 else "Unknown"
 
-EXTRACT FROM PLANS:
-- Floor area (m²)
-- Wall area (m²)
-- Roof area (m²)
-- Glazing area (m²)
-- R-values (wall, roof, floor, glazing U-value)
-- Climate zone
+            # Function to extract R-values from sheet
+            def extract_r_values(df, r_col=2):
+                r_vals = []
+                for i in range(len(df)):
+                    val = df.iloc[i, r_col]
+                    if pd.notna(val) and str(val).strip() and str(val).strip() != "No":
+                        try:
+                            r_vals.append(float(val))
+                        except:
+                            pass
+                return r_vals
 
-CALCULATE:
-- Construction R-value
-- Schedule Method compliance
-- Glazing % of floor area
+            slab_r = extract_r_values(slab_floors)
+            other_r = extract_r_values(other_floors)
+            roof_r = extract_r_values(roof)
+            skylights_r = extract_r_values(skylights)
+            walls_r = extract_r_values(walls)
+            glazing_r = extract_r_values(glazing)
+            doors_r = extract_r_values(doors)
 
-GIVE:
-- PASS/FAIL
-- Required vs Actual R-values
-- Fix if failed
+            # Results summary
+            result_summary = ""
+            for i in range(len(results)):
+                row = results.iloc[i]
+                if len(row) > 1 and pd.notna(row[1]):
+                    result_summary += f"{row[0] if pd.notna(row[0]) else ''}: {row[1]}\n"
 
-Example:
-- Floor Area: 218.40 m²
-- Glazing: 32 m² (14.6%)
-- Wall R-value: 2.4 (Required: 2.0) → PASS
-- Roof R-value: 3.8 (Required: 3.0) → PASS
-- Glazing U-value: 5.8 (Required: 5.5) → FAIL
-  - Fix: Upgrade to double glazing (U=4.8)"""},
-                        {"role": "user", "content": full_context}
-                    ]
-                )
-                st.success("H1 Calculation Complete")
-                with st.container():
-                    st.markdown(f"<div class='h1-calc'>{response.choices[0].message.content}</div>", unsafe_allow_html=True)
-            except Exception as e:
-                st.error(f"API Error: {e}")
+            # Display
+            st.success("H1 Calculation Complete")
+            with st.container():
+                st.markdown(f"""
+                <div class='h1-calc'>
+                <strong>Project:</strong> {territorial_authority}<br>
+                <strong>Climate Zone:</strong> {climate_zone}<br><br>
+                <strong>Slab Floors R-Values:</strong> {slab_r}<br>
+                <strong>Other Floors R-Values:</strong> {other_r}<br>
+                <strong>Roof R-Values:</strong> {roof_r}<br>
+                <strong>Skylights R-Values:</strong> {skylights_r}<br>
+                <strong>Walls R-Values:</strong> {walls_r}<br>
+                <strong>Glazing R-Values:</strong> {glazing_r}<br>
+                <strong>Doors R-Values:</strong> {doors_r}<br><br>
+                <strong>Results Summary:</strong><br>
+                {result_summary.replace(chr(10), '<br>')}
+                </div>
+                """, unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"H1 Error: {e}")
     else:
-        st.warning("No text found in plans.")
+        st.warning("No H1 Excel found in supporting docs.")
 
 # === COMPLIANCE CHECK ===
 if check_compliance and files:
     if plan_text.strip():
         with st.spinner("Running Full Compliance Check..."):
             try:
-                full_context = ""
-                if h1_text:
-                    full_context += f"H1 CALCS:\n{h1_text}\n"
-                full_context += f"PLANS:\n{plan_text}"
-
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
-                        {"role": "system", "content": """You are a NZBC compliance auditor.
+                        {"role": "system", "content": """You are a NZBC compliance auditor with 20 years experience.
 
-CHECK EVERY PAGE.
+CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
 
-INCLUDE H1 FROM CALCS.
+LOOK FOR:
+- KEY/LEGEND items (smoke alarms, vents, fire doors, etc.)
+- SYMBOLS on the plan (SD, FD, V, H, etc.)
 
 For EACH non-compliant item:
-- FILE + PAGE
-- Clause
-- Issue
+- FILE NAME + PAGE NUMBER
+- Clause (e.g., E1.3.1)
+- Issue description
 - SUGGESTED FIX
-- ALTERNATIVE
+- ALTERNATIVE (if main fix is impractical)
 
-ONLY bullet points."""},
-                        {"role": "user", "content": full_context}
+DO NOT SKIP ANYTHING. BE DETAILED.
+
+Example:
+- PLAN.pdf Page 6: F7.3.1 smoke detectors
+  - Clause: F7.3.1
+  - Issue: KEY says "SD required" but no SD in bedrooms
+  - Suggested: Add SD within 3m of bedroom doors
+  - Alternative: Note "to be installed per F7/AS1"
+
+ONLY bullet points. NO summary."""},
+                        {"role": "user", "content": plan_text}
                     ]
                 )
                 st.success("Compliance Check Complete")
@@ -182,11 +207,25 @@ if check_rfi and rfi_file:
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
-                        {"role": "system", "content": """You are a NZBC compliance engineer.
+                        {"role": "system", "content": """You are a NZBC compliance engineer defending the plans against council RFIs.
 
-ANSWER RFI USING PLANS + H1 CALCS.
+FOR EACH RFI POINT:
+1. QUOTE THE RFI QUESTION
+2. SEARCH THE PLANS HARD — find the exact page and text that answers it
+3. IF ANSWERED: Say "ALREADY COMPLIANT" + quote the plan text + page
+4. IF NOT ANSWERED: Give practical fix + alternative
 
-ONLY bullet points."""},
+Example:
+- RFI.pdf Page 1: "No E1 overflow shown"
+  - ALREADY COMPLIANT: "Overflow path shown on Page 5 (WD103): 'Secondary flow to boundary at 150mm freeboard'"
+  - Fix: Add detail to Page 5 if needed
+
+- RFI.pdf Page 2: "Setback breach"
+  - Issue: Building 1.2m from boundary
+  - Suggested: Apply for resource consent variation
+  - Alternative: Fire-rate wall to FRL 60/60/60 (C6)
+
+ONLY bullet points. NO summary."""},
                         {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{plan_text}"}
                     ]
                 )
