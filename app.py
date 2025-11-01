@@ -57,26 +57,27 @@ plan_text = ""
 h1_data = None
 rfi_text = ""
 
-if support_files:
-    for f in support_files:
+# Only extract if files are uploaded
+if plan_files or support_files or rfi_file:
+    # Extract plans + support
+    for f in (plan_files or []) + (support_files or []):
         if f.name.lower().endswith('.xlsx'):
             try:
                 h1_data = pd.ExcelFile(io.BytesIO(f.getvalue()))
                 st.success(f"H1 Excel {f.name} loaded.")
             except Exception as e:
                 st.error(f"Failed to read Excel {f.name}: {e}")
+        else:
+            try:
+                reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
+                for page_num, page in enumerate(reader.pages, 1):
+                    t = page.extract_text() or ""
+                    if t.strip():
+                        plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
+            except Exception as e:
+                st.error(f"Failed to read {f.name}: {e}")
 
-if files or rfi_file:
-    for f in files:
-        try:
-            reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
-            for page_num, page in enumerate(reader.pages, 1):
-                t = page.extract_text() or ""
-                if t.strip():
-                    plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
-        except Exception as e:
-            st.error(f"Failed to read {f.name}: {e}")
-
+    # Extract RFI
     if rfi_file:
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
@@ -88,77 +89,76 @@ if files or rfi_file:
             st.error(f"Failed to read RFI: {e}")
 
 # === H1 CALCULATION (SEPARATE BUTTON) ===
-if calc_h1:
-    if h1_data:
-        with st.spinner("Calculating H1 Compliance..."):
-            try:
-                # Parse sheets
-                project_details = h1_data.parse("Project Details")
-                slab_floors = h1_data.parse("Slab Floors")
-                other_floors = h1_data.parse("Other Floors")
-                roof = h1_data.parse("Roof")
-                skylights = h1_data.parse("Skylights")
-                walls = h1_data.parse("Walls")
-                glazing = h1_data.parse("Glazing (walls & doors)")
-                doors = h1_data.parse("Doors (opaque)")
-                results = h1_data.parse("Results")
+if calc_h1 and h1_data:
+    with st.spinner("Calculating H1 Compliance..."):
+        try:
+            # Parse sheets
+            project_details = h1_data.parse("Project Details")
+            slab_floors = h1_data.parse("Slab Floors")
+            other_floors = h1_data.parse("Other Floors")
+            roof = h1_data.parse("Roof")
+            skylights = h1_data.parse("Skylights")
+            walls = h1_data.parse("Walls")
+            glazing = h1_data.parse("Glazing (walls & doors)")
+            doors = h1_data.parse("Doors (opaque)")
+            results = h1_data.parse("Results")
 
-                # Extract key values
-                territorial_authority = project_details.iloc[0, 14] if len(project_details) > 0 else "Unknown"
-                climate_zone = project_details.iloc[0, 15] if len(project_details) > 0 else "Unknown"
+            # Extract key values
+            territorial_authority = project_details.iloc[0, 14] if len(project_details) > 0 else "Unknown"
+            climate_zone = project_details.iloc[0, 15] if len(project_details) > 0 else "Unknown"
 
-                # Function to extract R-values
-                def extract_r_values(df, r_col=2):
-                    r_vals = []
-                    for i in range(len(df)):
-                        val = df.iloc[i, r_col]
-                        if pd.notna(val) and str(val).strip() and str(val).strip() != "No":
-                            try:
-                                r_vals.append(float(val))
-                            except:
-                                pass
-                    return r_vals
+            # Function to extract R-values
+            def extract_r_values(df, r_col=2):
+                r_vals = []
+                for i in range(len(df)):
+                    val = df.iloc[i, r_col]
+                    if pd.notna(val) and str(val).strip() and str(val).strip() != "No":
+                        try:
+                            r_vals.append(float(val))
+                        except:
+                            pass
+                return r_vals
 
-                slab_r = extract_r_values(slab_floors)
-                other_r = extract_r_values(other_floors)
-                roof_r = extract_r_values(roof)
-                skylights_r = extract_r_values(skylights)
-                walls_r = extract_r_values(walls)
-                glazing_r = extract_r_values(glazing)
-                doors_r = extract_r_values(doors)
+            slab_r = extract_r_values(slab_floors)
+            other_r = extract_r_values(other_floors)
+            roof_r = extract_r_values(roof)
+            skylights_r = extract_r_values(skylights)
+            walls_r = extract_r_values(walls)
+            glazing_r = extract_r_values(glazing)
+            doors_r = extract_r_values(doors)
 
-                # Results summary
-                result_summary = ""
-                for i in range(len(results)):
-                    row = results.iloc[i]
-                    if len(row) > 1 and pd.notna(row[1]):
-                        result_summary += f"{row[0] if pd.notna(row[0]) else ''}: {row[1]}\n"
+            # Results summary
+            result_summary = ""
+            for i in range(len(results)):
+                row = results.iloc[i]
+                if len(row) > 1 and pd.notna(row[1]):
+                    result_summary += f"{row[0] if pd.notna(row[0]) else ''}: {row[1]}\n"
 
-                # Display
-                st.success("H1 Calculation Complete")
-                with st.container():
-                    st.markdown(f"""
-                    <div class='h1-calc'>
-                    <strong>Project:</strong> {territorial_authority}<br>
-                    <strong>Climate Zone:</strong> {climate_zone}<br><br>
-                    <strong>Slab Floors R-Values:</strong> {slab_r}<br>
-                    <strong>Other Floors R-Values:</strong> {other_r}<br>
-                    <strong>Roof R-Values:</strong> {roof_r}<br>
-                    <strong>Skylights R-Values:</strong> {skylights_r}<br>
-                    <strong>Walls R-Values:</strong> {walls_r}<br>
-                    <strong>Glazing R-Values:</strong> {glazing_r}<br>
-                    <strong>Doors R-Values:</strong> {doors_r}<br><br>
-                    <strong>Results Summary:</strong><br>
-                    {result_summary.replace(chr(10), '<br>')}
-                    </div>
-                    """, unsafe_allow_html=True)
-            except Exception as e:
-                st.error(f"H1 Error: {e}")
-    else:
-        st.warning("No H1 Excel found in supporting docs.")
+            # Display
+            st.success("H1 Calculation Complete")
+            with st.container():
+                st.markdown(f"""
+                <div class='h1-calc'>
+                <strong>Project:</strong> {territorial_authority}<br>
+                <strong>Climate Zone:</strong> {climate_zone}<br><br>
+                <strong>Slab Floors R-Values:</strong> {slab_r}<br>
+                <strong>Other Floors R-Values:</strong> {other_r}<br>
+                <strong>Roof R-Values:</strong> {roof_r}<br>
+                <strong>Skylights R-Values:</strong> {skylights_r}<br>
+                <strong>Walls R-Values:</strong> {walls_r}<br>
+                <strong>Glazing R-Values:</strong> {glazing_r}<br>
+                <strong>Doors R-Values:</strong> {doors_r}<br><br>
+                <strong>Results Summary:</strong><br>
+                {result_summary.replace(chr(10), '<br>')}
+                </div>
+                """, unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"H1 Error: {e}")
+elif calc_h1:
+    st.warning("No H1 Excel found in supporting docs.")
 
 # === COMPLIANCE CHECK ===
-if check_compliance and files:
+if check_compliance and (plan_files or support_files):
     if plan_text.strip():
         with st.spinner("Running Full Compliance Check..."):
             try:
