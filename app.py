@@ -4,7 +4,6 @@ import PyPDF2
 import io
 import os
 import pandas as pd
-import re
 
 # === PRO LOOK (CSS) ===
 st.markdown("""
@@ -76,7 +75,7 @@ if plan_files or support_files or rfi_file:
                 for page_num, page in enumerate(reader.pages, 1):
                     t = page.extract_text() or ""
                     if t.strip():
-                        plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
+                        plan_text += f"--- Page {page_num} ---\n{t}\n"
             except Exception as e:
                 st.error(f"Failed to read {f.name}: {e}")
 
@@ -86,7 +85,7 @@ if plan_files or support_files or rfi_file:
             for page_num, page in enumerate(reader.pages, 1):
                 t = page.extract_text() or ""
                 if t.strip():
-                    rfi_text += f"--- RFI: {rfi_file.name} - Page {page_num} ---\n{t}\n"
+                    rfi_text += f"--- RFI Page {page_num} ---\n{t}\n"
         except Exception as e:
             st.error(f"Failed to read RFI: {e}")
 
@@ -183,26 +182,31 @@ if check_compliance and (plan_files or support_files):
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
-                        {"role": "system", "content": """You are a NZBC compliance auditor.
+                        {"role": "system", "content": """You are a NZBC E2 weathertightness expert.
 
-CHECK EVERY PAGE FOR NON-COMPLIANCE.
+CHECK EVERY PAGE FOR MISSING E2 DETAILS.
 
 LOOK FOR:
-- KEY/LEGEND items (smoke alarms SD, vents V, fire doors FD, etc.)
-- SYMBOLS on plan (SD in bedrooms/hallways, FD on doors, V in wet areas)
-- E2: 135° corners, flashing at junctions, penetrations
-- H1: R-values (Zone 1: Slab R1.9, Roof R6.2, Wall R3.2, Glazing U≤3.8)
-- Geotech: Cu=70 kPa confirmed, no liquefaction
-- Council: Waikato Rural Zone setbacks 20m front/10m side/rear, height 10m, coverage 4.4% OK
+- 135° corners
+- Window/door penetrations
+- Pipe penetrations
+- Roof/wall junctions
+- Base details
+- Flashing (head, sill, jamb)
+
+FLAG IF:
+- 135° corner → No detail
+- Window → No head flashing
+- Pipe → No flashing tape
 
 For EACH issue:
-- FILE + PAGE
-- Clause (e.g., F7.3.1)
+- Page X
+- Clause (e.g., E2.3.2)
 - Issue
 - SUGGESTED FIX
 - ALTERNATIVE
 
-ONLY bullet points."""},
+ONLY bullet points. NO FILE NAME. NO ADDRESS."""},
                         {"role": "user", "content": plan_text}
                     ]
                 )
