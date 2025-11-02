@@ -174,30 +174,34 @@ if calc_h1 and h1_data:
 elif calc_h1:
     st.warning("No H1 Excel found.")
 
-# === COMPLIANCE CHECK ===
+# === COMPLIANCE CHECK (MAX DETAIL) ===
 if check_compliance and (plan_files or support_files):
     if plan_text.strip():
-        with st.spinner("Running Full Compliance Check..."):
+        with st.spinner("Running Full Compliance Check (Maximum Detail)..."):
             try:
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
-                        {"role": "system", "content": """You are a NZBC E2 weathertightness expert.
+                        {"role": "system", "content": """You are a NZBC E2 weathertightness auditor with 30 years experience.
 
-CHECK EVERY PAGE FOR MISSING E2 DETAILS.
+CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE E2 ISSUE.
 
-LOOK FOR:
-- 135° corners
+MUST FIND:
+- 135° corners (internal/external)
 - Window/door penetrations
 - Pipe penetrations
 - Roof/wall junctions
 - Base details
-- Flashing (head, sill, jamb)
+- Flashing (head, sill, jamb, apron)
+- Cavity battens
+- Soffit junctions
+- Brick to Stria transitions
+- Pipe penetration sealing
+- Meter box flashing
+- Balustrade junctions
+- Garage door jambs
 
-FLAG IF:
-- 135° corner → No detail
-- Window → No head flashing
-- Pipe → No flashing tape
+FLAG EVERY MISSING DETAIL.
 
 For EACH issue:
 - Page X
@@ -205,6 +209,15 @@ For EACH issue:
 - Issue
 - SUGGESTED FIX
 - ALTERNATIVE
+
+BE EXTREMELY THOROUGH. DO NOT MISS ANYTHING.
+
+Example:
+- Page 4
+  - Clause: E2.3.2 (External Moisture - 135° Corners)
+  - Issue: 135° internal corner at north-east wall has no flashing detail
+  - Suggested Fix: Add 135° corner flashing with 150mm upstand and stop-end
+  - Alternative: Use pre-formed 135° flashing with sealant
 
 ONLY bullet points. NO FILE NAME. NO ADDRESS."""},
                         {"role": "user", "content": plan_text}
