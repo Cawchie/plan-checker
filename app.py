@@ -4,6 +4,7 @@ import PyPDF2
 import io
 import os
 import pandas as pd
+import re
 
 # === PRO LOOK (CSS) ===
 st.markdown("""
@@ -14,6 +15,7 @@ st.markdown("""
     h1, h2, h3 { color: #343a40; font-family: 'Helvetica', sans-serif; font-weight: 600; }
     .report { background-color: #fff3cd; padding: 1.2rem; border-left: 6px solid #ffc107; border-radius: 8px; margin: 1.5rem 0; font-size: 1.05rem; line-height: 1.6; }
     .h1-calc { background-color: #d4edda; padding: 1.2rem; border-left: 6px solid #28a745; border-radius: 8px; margin: 1.5rem 0; font-size: 1.05rem; line-height: 1.6; }
+    .initial-check { background-color: #cce5ff; padding: 1.2rem; border-left: 6px solid #007bff; border-radius: 8px; margin: 1.5rem 0; font-size: 1.05rem; line-height: 1.6; }
     .footer { text-align: center; margin-top: 3rem; color: #6c757d; font-size: 0.9rem; }
 </style>
 """, unsafe_allow_html=True)
@@ -41,15 +43,18 @@ st.header("Upload RFI (Optional)")
 rfi_file = st.file_uploader("Upload RFI document", type="pdf", accept_multiple_files=False, key="rfi")
 
 # === BUTTONS ===
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    check_compliance = st.button("COMPLIANCE CHECK", type="primary")
+    initial_check = st.button("INITIAL JOB CHECK", type="secondary")
 
 with col2:
-    check_rfi = st.button("RFI RESPONSE", type="secondary")
+    check_compliance = st.button("COMPLIANCE CHECK", type="primary")
 
 with col3:
+    check_rfi = st.button("RFI RESPONSE", type="secondary")
+
+with col4:
     calc_h1 = st.button("H1 CALCULATION", type="secondary")
 
 # === EXTRACT TEXT ONCE ===
@@ -84,6 +89,50 @@ if plan_files or support_files or rfi_file:
                     rfi_text += f"--- RFI: {rfi_file.name} - Page {page_num} ---\n{t}\n"
         except Exception as e:
             st.error(f"Failed to read RFI: {e}")
+
+# === INITIAL JOB CHECK ===
+if initial_check and plan_text:
+    with st.spinner("Running Initial Job Check..."):
+        try:
+            response = client.chat.completions.create(
+                model="grok-3",
+                messages=[
+                    {"role": "system", "content": """You are a NZBC compliance expert.
+
+EXTRACT FROM PLANS:
+- Address
+- Council authority
+- Planning zone
+- Wind zone
+- Earthquake zone
+- Corrosion zone
+
+CHECK IF:
+- Address matches council/zone
+- Zones match site (e.g., rural zone setbacks 20m front, 10m side/rear; height 10m, coverage 10%)
+- Sound (e.g., Waikato Rural Zone: front 20m, side/rear 10m, height 10m, coverage 10%)
+
+GIVE:
+- PASS/FAIL
+- Required vs Actual
+- Fix if failed
+
+ONLY bullet points. Example:
+- Address: 85 Barnaby Road, Tuakau → PASS
+- Council: Waikato → PASS
+- Zone: Rural (Franklin) → PASS (setbacks 20m front, 10m side/rear)
+- Wind Zone: Very High → FAIL (plans show Low)
+  - Fix: Upgrade fixings per NZS3604 Table 5.1"""},
+                    {"role": "user", "content": plan_text}
+                ]
+            )
+            st.success("Initial Job Check Complete")
+            with st.container():
+                st.markdown(f"<div class='initial-check'>{response.choices[0].message.content}</div>", unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"API Error: {e}")
+elif initial_check:
+    st.warning("No plans found.")
 
 # === H1 CALCULATION ===
 if calc_h1 and h1_data:
@@ -134,31 +183,26 @@ if check_compliance and (plan_files or support_files):
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
-                        {"role": "system", "content": """You are a NZBC E2 weathertightness expert.
+                        {"role": "system", "content": """You are a NZBC compliance auditor.
 
-CHECK EVERY PAGE FOR MISSING E2 DETAILS.
+CHECK EVERY PAGE FOR NON-COMPLIANCE.
 
 LOOK FOR:
-- 135° corners
-- Window/door penetrations
-- Pipe penetrations
-- Roof/wall junctions
-- Base details
-- Flashing (head, sill, jamb)
+- KEY/LEGEND items (smoke alarms SD, vents V, fire doors FD, etc.)
+- SYMBOLS on plan (SD in bedrooms/hallways, FD on doors, V in wet areas)
+- E2: 135° corners, flashing at junctions, penetrations
+- H1: R-values (Zone 1: Slab R1.9, Roof R6.2, Wall R3.2, Glazing U≤3.8)
+- Geotech: Cu=70 kPa confirmed, no liquefaction
+- Council: Waikato Rural Zone setbacks 20m front/10m side/rear, height 10m, coverage 4.4% OK
 
-FLAG IF:
-- 135° corner → No detail
-- Window → No head flashing
-- Pipe → No flashing tape
+For EACH issue:
+- FILE + PAGE
+- Clause (e.g., F7.3.1)
+- Issue
+- SUGGESTED FIX
+- ALTERNATIVE
 
-Example:
-- PLAN.pdf Page 6: E2.3.2 135° corner
-  - Clause: E2.3.2
-  - Issue: 135° corner at north-east wall, no detail
-  - Suggested: Add 135° flashing detail with 150mm upstand
-  - Alternative: Use pre-formed 135° flashing
-
-ONLY bullet points. NO summary."""},
+ONLY bullet points."""},
                         {"role": "user", "content": plan_text}
                     ]
                 )
@@ -180,7 +224,11 @@ if check_rfi and rfi_file:
                     messages=[
                         {"role": "system", "content": """You are a NZBC compliance engineer.
 
-ANSWER RFI USING PLANS.
+FOR EACH RFI POINT:
+1. QUOTE RFI
+2. FIND ANSWER IN PLANS
+3. IF COMPLIANT: "ALREADY COMPLIANT" + quote + page
+4. IF NOT: FIX + ALTERNATIVE
 
 ONLY bullet points."""},
                         {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{plan_text}"}
