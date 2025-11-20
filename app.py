@@ -11,9 +11,7 @@ st.markdown("""
     .stButton>button { background-color: #007bff; color: white; font-weight: bold; border-radius: 8px; padding: 0.6rem 1.2rem; font-size: 1.1rem; width: 100%; margin: 0.5rem 0; }
     .stFileUploader > div > div { background-color: #e9ecef; border-radius: 8px; padding: 1rem; border: 2px dashed #ced4da; }
     h1, h2, h3 { color: #343a40; font-family: 'Helvetica', sans-serif; font-weight: 600; }
-    .report { background-color: #fff3cd; padding: 1.2rem; border-left: 6px solid #ffc107; border-radius: 8px; margin: 1.5rem 0; font-size: 1.05rem; line-height: 1.6; }
-    .fact-check { background-color: #d4edda; padding: 1.2rem; border-left: 6px solid #28a745; border-radius: 8px; margin: 1.5rem 0; font-size: 1.05rem; line-height: 1.6; }
-    .final-report { background-color: #e7f3ff; padding: 1.2rem; border-left: 6px solid #007bff; border-radius: 8px; margin: 1.5rem 0; font-size: 1.1rem; line-height: 1.6; }
+    .final-report { background-color: #d4edda; padding: 1.5rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.1rem; line-height: 1.6; }
     .footer { text-align: center; margin-top: 3rem; color: #6c757d; font-size: 0.9rem; }
 </style>
 """, unsafe_allow_html=True)
@@ -77,11 +75,12 @@ if files or rfi_file:
         except Exception as e:
             st.error(f"Failed to read RFI: {e}")
 
-# === COMPLIANCE CHECK + AUTO FACT CHECK ===
+# === COMPLIANCE CHECK + AUTO FACT CHECK + FINAL REPORT ===
 if check_compliance and files:
     if plan_text.strip():
-        with st.spinner("Running Full Compliance Check..."):
+        with st.spinner("Running Compliance Check + Fact Check..."):
             try:
+                # First: Run normal compliance check
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
@@ -107,45 +106,31 @@ ONLY bullet points. NO summary."""},
                     ]
                 )
                 report = response.choices[0].message.content
-                st.success("Compliance Check Complete")
-                with st.container():
-                    st.markdown(f"<div class='report'>{report}</div>", unsafe_allow_html=True)
 
-                # === AUTO FACT CHECK ===
-                with st.spinner("Running Fact Check..."):
-                    try:
-                        fact_check = client.chat.completions.create(
-                            model="grok-3",
-                            messages=[
-                                {"role": "system", "content": """You are the FACT CHECKER.
+                # Second: Fact check the report
+                fact_check = client.chat.completions.create(
+                    model="grok-3",
+                    messages=[
+                        {"role": "system", "content": """You are the FACT CHECKER.
 
 Check every flag in the report.
 
-If flag is CORRECT → say "CORRECT"
-If flag is WRONG or MISSING → say "INCORRECT — [explain]"
+If the flag is CORRECT → keep it
+If the flag is WRONG or MISSING → correct or add the right one
 
-Be brutal.
+Be brutal. Fix every mistake.
 
-Example:
-- Page 6: No SD symbols
-  → INCORRECT — SD symbols shown in bedrooms and hallway
+Output ONLY the FINAL 100% CORRECT report in the same format.
 
-ONLY reply with CORRECT or INCORRECT + explanation."""},
-                                {"role": "user", "content": f"REPORT:\n{report}\n\nPLANS:\n{plan_text}"}
-                            ]
-                        )
-                        fact_report = fact_check.choices[0].message.content
-                        st.success("Fact Check Complete")
-                        with st.container():
-                            st.markdown(f"<div class='fact-check'>{fact_report}</div>", unsafe_allow_html=True)
+NO explanations. NO "this is correct" — just the clean report."""},
+                        {"role": "user", "content": f"REPORT TO CHECK:\n{report}\n\nPLANS:\n{plan_text}"}
+                    ]
+                )
+                final_report = fact_check.choices[0].message.content
 
-                        # === FINAL 100% REPORT ===
-                        st.balloons()
-                        st.success("100% VERIFIED REPORT")
-                        with st.container():
-                            st.markdown(f"<div class='final-report'><strong>FINAL VERIFIED REPORT</strong>\n\n{report}\n\n<strong>FACT CHECK VERDICT:</strong>\n{fact_report}</div>", unsafe_allow_html=True)
-                    except Exception as e:
-                        st.error(f"Fact Check Error: {e}")
+                st.success("100% VERIFIED REPORT READY")
+                with st.container():
+                    st.markdown(f"<div class='final-report'>{final_report}</div>", unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"API Error: {e}")
     else:
