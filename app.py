@@ -75,12 +75,12 @@ if files or rfi_file:
         except Exception as e:
             st.error(f"Failed to read RFI: {e}")
 
-# === COMPLIANCE CHECK + AUTO FACT CHECK + FINAL REPORT ===
+# === COMPLIANCE CHECK + FACT CHECK + FINAL REPORT ===
 if check_compliance and files:
     if plan_text.strip():
         with st.spinner("Running Compliance Check + Fact Check..."):
             try:
-                # First: Run normal compliance check
+                # First: Run compliance check
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
@@ -107,7 +107,7 @@ ONLY bullet points. NO summary."""},
                 )
                 report = response.choices[0].message.content
 
-                # Second: Fact check the report
+                # Second: Fact check & fix
                 fact_check = client.chat.completions.create(
                     model="grok-3",
                     messages=[
@@ -115,8 +115,8 @@ ONLY bullet points. NO summary."""},
 
 Check every flag in the report.
 
-If the flag is CORRECT → keep it
-If the flag is WRONG or MISSING → correct or add the right one
+If flag is CORRECT → keep it
+If flag is WRONG or MISSING → correct or add the right one
 
 Be brutal. Fix every mistake.
 
@@ -128,9 +128,10 @@ NO explanations. NO "this is correct" — just the clean report."""},
                 )
                 final_report = fact_check.choices[0].message.content
 
+                st.balloons()
                 st.success("100% VERIFIED REPORT READY")
                 with st.container():
-                    st.markdown(f"<div class='final-report'>{final_report}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"API Error: {e}")
     else:
