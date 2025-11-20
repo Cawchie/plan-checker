@@ -26,7 +26,7 @@ if not api_key:
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-# === SINGLE UPLOAD BOX FOR EVERYTHING ===
+# === SINGLE UPLOAD BOX ===
 st.header("Upload All Files (Plans, Geotech, H1, RFI)")
 uploaded_files = st.file_uploader("Drag & drop all PDFs here", type="pdf", accept_multiple_files=True, key="all_files")
 
@@ -93,7 +93,7 @@ For EACH non-compliant item:
 - SUGGESTED FIX
 - ALTERNATIVE (if main fix is impractical)
 
-CHECK ALL CLAUSES:
+CHECK:
 E1, E2, E3, B1, B2, D1, D2, F1–F9, G1–G15, H1
 Council: height, coverage, setbacks, zoning
 Geotech: soil bearing, liquefaction
