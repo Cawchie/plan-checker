@@ -1,36 +1,36 @@
-import streamlit as st
+import streamlit = st
+
 from openai import OpenAI
 import PyPDF2
 import io
 import os
 
-# === PRO LOOK (CSS) ===
+# === PRO LOOK ===
 st.markdown("""
 <style>
     .main { background-color: #f8f9fa; padding: 2rem; border-radius: 10px; }
     .stButton>button { background-color: #0066cc; color: white; font-weight: bold; border-radius: 8px; padding: 0.7rem 1.4rem; font-size: 1.1rem; width: 100%; margin: 0.5rem 0; }
     .stFileUploader > div > div { background-color: #e9f2ff; border-radius: 8px; padding: 1rem; border: 2px dashed #99ccff; }
-    h1, h2, h3 { color: #003366; font-family: 'Helvetica', sans-serif; font-weight: 600; }
-    .final-report { background-color: #e8f5e8; padding: 1.5rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.1rem; line-height: 1.6; }
-    .footer { text-align: center; margin-top: 3rem; color: #6c757d; font-size: 0.9rem; }
+    h1 { color: #003366; text-align: center; }
+    .final-report { background-color: #e8f5e8; padding: 2rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.1rem; }
+    .footer { text-align: center; margin-top: 4rem; color: #666; font-size: 0.9rem; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("xAI Plan Checker PRO — Grok-4.1")
 
-# Get key
 api_key = os.environ.get("XAI_API_KEY")
 if not api_key:
-    st.error("API key missing! Add XAI_API_KEY in Settings.")
+    st.error("API key missing!")
     st.stop()
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-# === SINGLE UPLOAD BOX ===
+# SINGLE UPLOAD BOX
 st.header("Upload All Files (Plans, Geotech, H1, RFI)")
-uploaded_files = st.file_uploader("Drag & drop all PDFs here", type="pdf", accept_multiple_files=True, key="all_files")
+uploaded_files = st.file_uploader("Drag & drop all PDFs", type="pdf", accept_multiple_files=True, key="all")
 
-# Separate RFI detection
+# Auto-detect RFI
 rfi_file = None
 other_files = []
 for f in uploaded_files or []:
@@ -39,16 +39,14 @@ for f in uploaded_files or []:
     else:
         other_files.append(f)
 
-# === BUTTONS ===
+# BUTTONS
 col1, col2 = st.columns(2)
-
 with col1:
-    check_compliance = st.button("COMPLIANCE CHECK", type="primary")
-
+    compliance = st.button("COMPLIANCE CHECK", type="primary")
 with col2:
-    check_rfi = st.button("RFI RESPONSE", type="secondary")
+    rfi = st.button("RFI RESPONSE", type="secondary")
 
-# === EXTRACT TEXT ONCE ===
+# EXTRACT TEXT
 plan_text = ""
 rfi_text = ""
 
@@ -60,8 +58,8 @@ if other_files:
                 t = page.extract_text() or ""
                 if t.strip():
                     plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
-        except Exception as e:
-            st.error(f"Failed to read {f.name}: {e}")
+        except:
+            st.error(f"Failed to read {f.name}")
 
 if rfi_file:
     try:
@@ -69,78 +67,71 @@ if rfi_file:
         for page_num, page in enumerate(reader.pages, 1):
             t = page.extract_text() or ""
             if t.strip():
-                rfi_text += f"--- RFI: {rfi_file.name} - Page {page_num} ---\n{t}\n"
-    except Exception as e:
-        st.error(f"Failed to read RFI: {e}")
+                rfi_text += f"--- RFI Page {page_num} ---\n{t}\n"
+    except:
+        st.error("Failed to read RFI")
 
-# === COMPLIANCE CHECK + FACT CHECK + FINAL REPORT ===
-if check_compliance and other_files:
+# COMPLIANCE CHECK + FACT CHECK + FINAL REPORT
+if compliance and other_files:
     if plan_text.strip():
-        with st.spinner("Creating 100% Verified Report with Grok-4.1..."):
+        with st.spinner("Running Grok-4.1 Compliance Check + Fact Check..."):
             try:
-                # First: Run compliance check
+                # Step 1: Generate report
                 response = client.chat.completions.create(
                     model="grok-4.1",
                     messages=[
-                        {"role": "system", "content": """You are a NZBC compliance auditor with 30 years experience.
+                        {"role": "system", "content": """You are a senior NZBC compliance auditor.
 
-CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
+CHECK EVERY PAGE FOR EVERY POSSIBLE ISSUE.
 
 For EACH non-compliant item:
-- FILE NAME + PAGE NUMBER
-- Clause (e.g., E1.3.1)
-- Issue description
-- SUGGESTED FIX
-- ALTERNATIVE (if main fix is impractical)
-
-CHECK:
-E1, E2, E3, B1, B2, D1, D2, F1–F9, G1–G15, H1
-Council: height, coverage, setbacks, zoning
-Geotech: soil bearing, liquefaction
-H1: R-values, thermal bridging
+- Page X
+- Clause
+- Issue
+- Suggested Fix
+- Alternative
 
 BE EXTREMELY THOROUGH.
 
-ONLY bullet points. NO summary."""},
+If geotech report is uploaded — use it to verify B1 assumptions. If matches, DO NOT FLAG.
+
+ONLY bullet points."""},
                         {"role": "user", "content": plan_text}
                     ]
                 )
                 report = response.choices[0].message.content
 
-                # Second: Fact check & fix
+                # Step 2: Fact check
                 fact_check = client.chat.completions.create(
                     model="grok-4.1",
                     messages=[
                         {"role": "system", "content": """You are the FACT CHECKER.
 
-Check every flag in the report.
+Check every flag.
 
-If the flag is CORRECT → keep it
-If the flag is WRONG or MISSING → correct or add the right one
+If correct → keep
+If wrong or missing → fix/add
 
-Be brutal. Fix every mistake.
+Output ONLY the FINAL 100% CORRECT report.
 
-Output ONLY the FINAL 100% CORRECT report in the same format.
-
-NO explanations. NO "this is correct" — just the clean report."""},
-                        {"role": "user", "content": f"REPORT TO CHECK:\n{report}\n\nPLANS:\n{plan_text}"}
+NO explanations."""},
+                        {"role": "user", "content": f"REPORT:\n{report}\n\nPLANS:\n{plan_text}"}
                     ]
                 )
                 final_report = fact_check.choices[0].message.content
 
                 st.balloons()
-                st.success("100% VERIFIED REPORT READY (Grok-4.1)")
-                with st.container():
-                    st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT (Grok-4.1)</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
+                st.success("100% VERIFIED REPORT READY")
+                st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
             except Exception as e:
-                st.error(f"API Error: {e}")
+                st.error(f"Error: {e}")
     else:
-        st.warning("No text found in plans.")
+        st.warning("No text found.")
 
-# === RFI RESPONSE ===
-if check_rfi and rfi_file:
+# RFI RESPONSE
+if rfi and rfi_file:
     if rfi_text:
-        with st.spinner("Analyzing RFI with Grok-4.1..."):
+        with st.spinner("Generating RFI Response with Grok-4.1..."):
             try:
                 response = client.chat.completions.create(
                     model="grok-4.1",
@@ -157,13 +148,11 @@ ONLY bullet points."""},
                         {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{plan_text}"}
                     ]
                 )
-                st.success("RFI Response Complete")
-                with st.container():
-                    st.markdown(f"<div class='report'>{response.choices[0].message.content}</div>", unsafe_allow_html=True)
+                st.success("RFI Response Ready")
+                st.markdown(f"<div class='final-report'>{response.choices[0].message.content}</div>", unsafe_allow_html=True)
             except Exception as e:
-                st.error(f"API Error: {e}")
-    else:
-        st.warning("No text found in RFI.")
+                st.error(f"Error: {e}")
 
-# Footer
+st)
+
 st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-4.1</div>", unsafe_allow_html=True)
