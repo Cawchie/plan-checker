@@ -26,7 +26,7 @@ if not api_key:
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-# Single upload box
+# === SINGLE UPLOAD BOX ===
 st.header("Upload All Files (Plans, Geotech, H1, RFI)")
 uploaded_files = st.file_uploader("Drag & drop all PDFs here", type="pdf", accept_multiple_files=True, key="all_files")
 
@@ -34,7 +34,7 @@ uploaded_files = st.file_uploader("Drag & drop all PDFs here", type="pdf", accep
 rfi_file = None
 other_files = []
 for f in uploaded_files or []:
-    if "rfi" in f.name.lower() or "request for information" in f.name.lower():
+    if "rfi" in f.name.lower():
         rfi_file = f
     else:
         other_files.append(f)
@@ -73,54 +73,59 @@ if rfi_file:
     except Exception as e:
         st.error(f"Failed to read RFI: {e}")
 
-# === COMPLIANCE CHECK + FACT CHECK + FINAL REPORT ===
+# === COMPLIANCE CHECK — MAX THOROUGHNESS (10 ISSUES PER CLAUSE) ===
 if check_compliance and other_files:
     if plan_text.strip():
         with st.spinner("Creating 100% Verified Report..."):
             try:
-                # First: Run compliance check
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
-                        {"role": "system", "content": """You are a NZBC compliance auditor with 20 years experience.
+                        {"role": "system", "content": """You are a NZBC compliance auditor with 30 years experience.
 
-CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
+BE EXTREMELY THOROUGH.
 
-For EACH non-compliant item:
-- FILE NAME + PAGE NUMBER
-- Clause (e.g., E1.3.1)
-- Issue description
-- SUGGESTED FIX
-- ALTERNATIVE (if main fix is impractical)
+For EVERY NZBC clause (E1, E2, E3, B1, B2, D1, D2, F7, G4, G12, G13, H1, C3, etc.), list UP TO 10 specific issues.
 
-CHECK:
-E1, E2, E3, B1, B2, D1, D2, F1–F9, G1–G15, H1
-Council: height, coverage, setbacks, zoning
-Geotech: soil bearing, liquefaction
-H1: R-values, thermal bridging
+If fewer than 10 issues in a clause, write "Only X issues found for [clause]" at the end of that clause.
 
-ONLY bullet points. NO summary."""},
+Structure:
+**Clause E2 – External Moisture**
+- Issue 1: ...
+  Suggested Fix: ...
+  Alternative: ...
+- Issue 2: ...
+  ...
+- Only 7 issues found for E2
+
+Do this for every clause that has issues.
+
+If a clause has no issues, say "**Clause E2 – External Moisture**: No issues found"
+
+Cover ALL clauses.
+
+Be brutal — find every possible minor issue.
+
+ONLY use this format. NO intro text."""},
                         {"role": "user", "content": plan_text}
                     ]
                 )
                 report = response.choices[0].message.content
 
-                # Second: Fact check & fix
+                # Fact check
                 fact_check = client.chat.completions.create(
                     model="grok-3",
                     messages=[
                         {"role": "system", "content": """You are the FACT CHECKER.
 
-Check every flag in the report.
+Check every flag.
 
-If the flag is CORRECT → keep it
-If the flag is WRONG or MISSING → correct or add the right one
+If correct → keep it
+If wrong or missing → fix or add
 
-Be brutal. Fix every mistake.
+Output ONLY the FINAL 100% CORRECT report in the exact same format.
 
-Output ONLY the FINAL 100% CORRECT report in the same format.
-
-NO explanations. NO "this is correct" — just the clean report."""},
+NO explanations."""},
                         {"role": "user", "content": f"REPORT TO CHECK:\n{report}\n\nPLANS:\n{plan_text}"}
                     ]
                 )
