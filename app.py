@@ -11,12 +11,12 @@ st.markdown("""
     .stButton>button { background-color: #0066cc; color: white; font-weight: bold; border-radius: 8px; padding: 0.7rem 1.4rem; font-size: 1.1rem; width: 100%; margin: 0.5rem 0; }
     .stFileUploader > div > div { background-color: #e9f2ff; border-radius: 8px; padding: 1rem; border: 2px dashed #99ccff; }
     h1 { color: #003366; text-align: center; }
-    .final-report { background-color: #e8f5e8; padding: 1.5rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.1rem; line-height: 1.6; }
+    .final-report { background-color: #e8f5e8; padding: 2rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.1rem; }
     .footer { text-align: center; margin-top: 4rem; color: #666; font-size: 0.9rem; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("xAI Plan Checker PRO — Grok-beta")
+st.title("xAI Plan Checker PRO — Grok-3")
 
 # Get key
 api_key = os.environ.get("XAI_API_KEY")
@@ -50,6 +50,7 @@ with col2:
 
 # === EXTRACT TEXT ONCE ===
 plan_text = ""
+geotech_text = ""
 rfi_text = ""
 
 if other_files:
@@ -59,7 +60,10 @@ if other_files:
             for page_num, page in enumerate(reader.pages, 1):
                 t = page.extract_text() or ""
                 if t.strip():
-                    plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
+                    if any(k in f.name.lower() for k in ["geotech", "geotechnical", "soil", "geo"]):
+                        geotech_text += f"--- GEOTECH REPORT: {f.name} - Page {page_num} ---\n{t}\n"
+                    else:
+                        plan_text += f"--- PLANS/CALCS: {f.name} - Page {page_num} ---\n{t}\n"
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
@@ -76,40 +80,41 @@ if rfi_file:
 # === COMPLIANCE CHECK + FACT CHECK + FINAL REPORT ===
 if check_compliance and other_files:
     if plan_text.strip():
-        with st.spinner("Creating 100% Verified Report with Grok-beta..."):
+        with st.spinner("Creating 100% Verified Report with Grok-3..."):
             try:
                 # First: Run compliance check
                 response = client.chat.completions.create(
-                    model="grok-beta",
+                    model="grok-3",
                     messages=[
                         {"role": "system", "content": """You are a NZBC compliance auditor with 30 years experience.
 
-CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
+A GEOTECH REPORT IS INCLUDED BELOW — USE IT TO VERIFY ALL B1.3.1 ASSUMPTIONS.
 
-For EACH non-compliant item:
+If the geotech report confirms the assumptions in the calcs (e.g., Cu=70 kPa, no liquefaction), DO NOT FLAG geotech issues.
+
+For EVERY other non-compliant item:
 - FILE NAME + PAGE NUMBER
 - Clause (e.g., E1.3.1)
 - Issue description
 - SUGGESTED FIX
-- ALTERNATIVE (if main fix is impractical)
+- ALTERNATIVE
 
 CHECK:
 E1, E2, E3, B1, B2, D1, D2, F1–F9, G1–G15, H1
 Council: height, coverage, setbacks, zoning
-Geotech: soil bearing, liquefaction
-H1: R-values, thermal bridging
+Weathertightness: flashing, cladding, junctions
 
 BE EXTREMELY THOROUGH.
 
 ONLY bullet points. NO summary."""},
-                        {"role": "user", "content": plan_text}
+                        {"role": "user", "content": f"GEOTECH REPORT (USE THIS FIRST):\n{geotech_text}\n\nPLANS & CALCS:\n{plan_text}"}
                     ]
                 )
                 report = response.choices[0].message.content
 
                 # Second: Fact check & fix
                 fact_check = client.chat.completions.create(
-                    model="grok-beta",
+                    model="grok-3",
                     messages=[
                         {"role": "system", "content": """You are the FACT CHECKER.
 
@@ -122,16 +127,16 @@ Be brutal. Fix every mistake.
 
 Output ONLY the FINAL 100% CORRECT report in the same format.
 
-NO explanations. NO "this is correct" — just the clean report."""},
-                        {"role": "user", "content": f"REPORT TO CHECK:\n{report}\n\nPLANS:\n{plan_text}"}
+NO explanations."""},
+                        {"role": "user", "content": f"REPORT TO CHECK:\n{report}\n\nGEOTECH REPORT:\n{geotech_text}\n\nPLANS:\n{plan_text}"}
                     ]
                 )
                 final_report = fact_check.choices[0].message.content
 
                 st.balloons()
-                st.success("100% VERIFIED REPORT READY (Grok-beta)")
+                st.success("100% VERIFIED REPORT READY (Grok-3)")
                 with st.container():
-                    st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT (Grok-beta)</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT (Grok-3)</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"API Error: {e}")
     else:
@@ -140,10 +145,10 @@ NO explanations. NO "this is correct" — just the clean report."""},
 # === RFI RESPONSE ===
 if check_rfi and rfi_file:
     if rfi_text:
-        with st.spinner("Analyzing RFI with Grok-beta..."):
+        with st.spinner("Analyzing RFI with Grok-3..."):
             try:
                 response = client.chat.completions.create(
-                    model="grok-beta",
+                    model="grok-3",
                     messages=[
                         {"role": "system", "content": """You are a NZBC compliance engineer.
 
@@ -166,4 +171,4 @@ ONLY bullet points."""},
         st.warning("No text found in RFI.")
 
 # Footer
-st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-beta</div>", unsafe_allow_html=True)
+st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-3</div>", unsafe_allow_html=True)
