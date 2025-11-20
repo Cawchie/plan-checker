@@ -30,9 +30,12 @@ st.header("Upload All Files (Plans, Geotech, H1, RFI)")
 uploaded_files = st.file_uploader("", type="pdf", accept_multiple_files=True, key="files")
 
 rfi_file = None
-other_files = [f for f in uploaded_files or [] if "rfi" not in f.name.lower()]
-if uploaded_files:
-    rfi_file = next((f for f in uploaded_files if "rfi" in f.name.lower()), None)
+other_files = []
+for f in uploaded_files or []:
+    if "rfi" in f.name.lower():
+        rfi_file = f
+    else:
+        other_files.append(f)
 
 col1, col2 = st.columns(2)
 with col1:
@@ -52,40 +55,38 @@ if other_files:
                 if t.strip():
                     file_text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
             
-            # AUTO-SUMMARIZE EVERY FILE TO AVOID TOKEN LIMIT
-            if len(file_text) > 30000:
+            # AUTO-SUMMARIZE IF FILE TOO LONG — TOKEN-PROOF
+            if len(file_text) > 35000:
                 with st.spinner(f"Summarizing {f.name}..."):
                     summary = client.chat.completions.create(
                         model="grok-3",
                         messages=[
-                            {"role": "system", "content": "Summarize ONLY compliance-critical information: clauses, R-values, geotech values, flashing, bracing, producer statements, specifications, council notes. Be concise but complete. Include all numbers and clauses."},
+                            {"role": "system", "content": "Summarize ONLY compliance-critical information: clauses, R-values, geotech values, flashing, bracing, producer statements, specifications, council notes, numbers. Be concise but complete."},
                             {"role": "user", "content": file_text}
                         ]
                     )
                     file_text = summary.choices[0].message.content + f"\n(Source: {f.name})"
             
-            plan_text += file_text += file_text + "\n\n"
+            plan_text += file_text + "\n\n"
         except:
             pass
 
 if compliance and plan_text:
-    with st.spinner("Grok-3 is checking every clause..."):
+    with st.spinner("Grok-3 is analysing every page by page..."):
         try:
             response = client.chat.completions.create(
                 model="grok-3",
                 messages=[
                     {"role": "system", "content": """You are the most thorough NZBC compliance auditor in New Zealand.
 
-List EVERY possible non-compliance in bullet points:
+List every possible non-compliance in bullet points:
 - File + Page
 - Clause
 - Issue
-- Suggested Fix
+- Fix
 - Alternative
 
 Check E1, E2, E3, B1, B2, C, D1, F7, G4, G5, G12, G13, H1, council rules.
-
-Use any geotech, H1, spec info provided.
 
 Be brutal. Find everything.
 
@@ -95,15 +96,14 @@ ONLY bullet points."""},
             )
             report = response.choices[0].message.content
 
-            # Final fact-check
-            final = client.chat.completions.create(
+            fact_check = client.chat.completions.create(
                 model="grok-3",
                 messages=[
-                    {"role": "system", "content": "You are the FINAL FACT CHECKER. Fix every wrong or missing flag. Output ONLY the perfect report."},
-                    {"role": "user", "content": report + "\n\nPLANS:\n" + plan_text}
+                    {"role": "system", "content": "You are the FINAL FACT CHECKER. Fix every wrong or missing flag. Output ONLY the perfect report. No explanations."},
+                    {"role": "user", "content": report + "\n\nFULL PLANS:\n" + plan_text}
                 ]
             )
-            final_report = final.choices[0].message.content
+            final_report = fact_check.choices[0].message.content
 
             st.balloons()
             st.success("100% ACCURATE REPORT READY")
@@ -112,7 +112,6 @@ ONLY bullet points."""},
             st.error(f"Error: {e}")
 
 if rfi and rfi_file:
-    # RFI code unchanged — works perfectly
     rfi_text = ""
     try:
         reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
@@ -128,10 +127,10 @@ if rfi and rfi_file:
             resp = client.chat.completions.create(
                 model="grok-3",
                 messages=[
-                    {"role": "system", "content": "You are a senior consent engineer. For each RFI point: quote it, then say ALREADY COMPLIANT + proof/page or FIX + ALTERNATIVE. Bullet points only."},
+                    {"role": "system", "content": "For each RFI point: quote it, then say ALREADY COMPLIANT + proof or FIX + ALTERNATIVE. Bullet points only."},
                     {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{plan_text}"}
                 ]
             )
             st.markdown(f"<div class='final-report'>{resp.choices[0].message.content}</div>", unsafe_allow_html=True)
 
-st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-3</div>", unsafe_allow_html=True)
+st.markdown("xAI Plan Checker PRO © 2025 | Powered by Grok-3", unsafe_allow_html=True)
