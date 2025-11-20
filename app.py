@@ -48,7 +48,7 @@ with col1:
 with col2:
     check_rfi = st.button("RFI RESPONSE", type="secondary")
 
-# === EXTRACT TEXT ONCE ===
+# === EXTRACT & SUMMARIZE TEXT (TOKEN-PROOF) ===
 plan_text = ""
 rfi_text = ""
 
@@ -61,7 +61,19 @@ if other_files:
                 t = page.extract_text() or ""
                 if t.strip():
                     file_text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
-            plan_text += file_text
+            
+            # Auto-summarize if too long
+            if len(file_text) > 40000:
+                summary = client.chat.completions.create(
+                    model="grok-3",
+                    messages=[
+                        {"role": "system", "content": "Summarize ONLY compliance-relevant info: clauses, R-values, zones, geotech values, flashing details, council notes, specs. Be concise."},
+                        {"role": "user", "content": file_text}
+                    ]
+                )
+                file_text = summary.choices[0].message.content + f"\n(Source file: {f.name})"
+            
+            plan_text += file_text + "\n\n"
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
@@ -71,34 +83,22 @@ if rfi_file:
         for page_num, page in enumerate(reader.pages, 1):
             t = page.extract_text() or ""
             if t.strip():
-                rfi_text += f"--- RFI: {rfi_file.name} - Page {page_num} ---\n{t}\n"
+                rfi_text += f"--- RFI Page {page_num} ---\n{t}\n"
     except Exception as e:
         st.error("Failed to read RFI")
 
-# === COMPLIANCE CHECK + AUTO-SUMMARY IF TOO LONG + FINAL REPORT ===
+# === COMPLIANCE CHECK + FACT CHECK + FINAL REPORT ===
 if check_compliance and other_files:
     if plan_text.strip():
-        with st.spinner("Analysing plans with Grok-3..."):
+        with st.spinner("Creating 100% Verified Report with Grok-3..."):
             try:
-                # If text is too long, summarize first
-                input_text = plan_text
-                if len(plan_text) > 100000:  # Rough token guard
-                    summary = client.chat.completions.create(
-                        model="grok-3",
-                        messages=[
-                            {"role": "system", "content": "Summarize ONLY the compliance-relevant information (R-values, zones, geotech values, flashing details, council notes, specifications, clauses mentioned). Be concise but complete."},
-                            {"role": "user", "content": plan_text}
-                        ]
-                    )
-                    input_text = summary.choices[0].message.content
-
                 # Run compliance check
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
-                        {"role": "system", "content": """You are a senior NZBC compliance auditor.
+                        {"role": "system", "content": """You are a NZBC compliance auditor with 30 years experience.
 
-CHECK FOR EVERY POSSIBLE ISSUE.
+CHECK EVERY PAGE FOR EVERY POSSIBLE ISSUE.
 
 For EACH non-compliant item:
 - FILE NAME + PAGE NUMBER
@@ -110,7 +110,7 @@ For EACH non-compliant item:
 BE EXTREMELY THOROUGH.
 
 ONLY bullet points."""},
-                        {"role": "user", "content": input_text}
+                        {"role": "user", "content": plan_text}
                     ]
                 )
                 report = response.choices[0].message.content
@@ -129,7 +129,7 @@ If wrong or missing → fix/add
 Output ONLY the FINAL 100% CORRECT report.
 
 NO explanations."""},
-                        {"role": "user", "content": f"REPORT:\n{report}\n\nPLANS:\n{input_text}"}
+                        {"role": "user", "content": f"REPORT:\n{report}\n\nPLANS:\n{plan_text}"}
                     ]
                 )
                 final_report = fact_check.choices[0].message.content
