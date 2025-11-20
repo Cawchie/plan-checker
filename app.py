@@ -8,15 +8,15 @@ import os
 st.markdown("""
 <style>
     .main { background-color: #f8f9fa; padding: 2rem; border-radius: 10px; }
-    .stButton>button { background-color: #007bff; color: white; font-weight: bold; border-radius: 8px; padding: 0.6rem 1.2rem; font-size: 1.1rem; width: 100%; margin: 0.5rem 0; }
-    .stFileUploader > div > div { background-color: #e9ecef; border-radius: 8px; padding: 1rem; border: 2px dashed #ced4da; }
-    h1, h2, h3 { color: #343a40; font-family: 'Helvetica', sans-serif; font-weight: 600; }
-    .final-report { background-color: #d4edda; padding: 1.5rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.1rem; line-height: 1.6; }
+    .stButton>button { background-color: #0066cc; color: white; font-weight: bold; border-radius: 8px; padding: 0.7rem 1.4rem; font-size: 1.1rem; width: 100%; margin: 0.5rem 0; }
+    .stFileUploader > div > div { background-color: #e9f2ff; border-radius: 8px; padding: 1rem; border: 2px dashed #99ccff; }
+    h1, h2, h3 { color: #003366; font-family: 'Helvetica', sans-serif; font-weight: 600; }
+    .final-report { background-color: #e8f5e8; padding: 1.5rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.1rem; line-height: 1.6; }
     .footer { text-align: center; margin-top: 3rem; color: #6c757d; font-size: 0.9rem; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("xAI Plan Checker")
+st.title("xAI Plan Checker PRO")
 
 # Get key
 api_key = os.environ.get("XAI_API_KEY")
@@ -26,20 +26,18 @@ if not api_key:
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-# Upload Plans
-st.header("Upload Plans (Required)")
-plan_files = st.file_uploader("Upload plans", type="pdf", accept_multiple_files=True, key="plans")
+# Single upload box
+st.header("Upload All Files (Plans, Geotech, H1, RFI)")
+uploaded_files = st.file_uploader("Drag & drop all PDFs here", type="pdf", accept_multiple_files=True, key="all_files")
 
-# Upload Supporting Docs
-st.header("Upload Supporting Docs (Geotech, H1, etc.)")
-support_files = st.file_uploader("Upload geotech, H1 calcs, etc.", type=["pdf", "xlsx"], accept_multiple_files=True, key="support")
-
-# Upload RFI
-st.header("Upload RFI (Optional)")
-rfi_file = st.file_uploader("Upload RFI document", type="pdf", accept_multiple_files=False, key="rfi")
-
-# Combine non-RFI files
-files = plan_files + support_files
+# Separate RFI detection
+rfi_file = None
+other_files = []
+for f in uploaded_files or []:
+    if "rfi" in f.name.lower() or "request for information" in f.name.lower():
+        rfi_file = f
+    else:
+        other_files.append(f)
 
 # === BUTTONS ===
 col1, col2 = st.columns(2)
@@ -54,29 +52,29 @@ with col2:
 plan_text = ""
 rfi_text = ""
 
-if files or rfi_file:
-    for f in files:
+if other_files:
+    for f in other_files:
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
             for page_num, page in enumerate(reader.pages, 1):
                 t = page.extract_text() or ""
                 if t.strip():
-                    plan_text += f"--- Page {page_num} ---\n{t}\n"
+                    plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
-    if rfi_file:
-        try:
-            reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
-            for page_num, page in enumerate(reader.pages, 1):
-                t = page.extract_text() or ""
-                if t.strip():
-                    rfi_text += f"--- RFI Page {page_num} ---\n{t}\n"
-        except Exception as e:
-            st.error(f"Failed to read RFI: {e}")
+if rfi_file:
+    try:
+        reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
+        for page_num, page in enumerate(reader.pages, 1):
+            t = page.extract_text() or ""
+            if t.strip():
+                rfi_text += f"--- RFI: {rfi_file.name} - Page {page_num} ---\n{t}\n"
+    except Exception as e:
+        st.error(f"Failed to read RFI: {e}")
 
 # === COMPLIANCE CHECK + FACT CHECK + FINAL REPORT ===
-if check_compliance and files:
+if check_compliance and other_files:
     if plan_text.strip():
         with st.spinner("Creating 100% Verified Report..."):
             try:
@@ -88,22 +86,18 @@ if check_compliance and files:
 
 CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
 
-GEOTECH REPORT IS UPLOADED — USE IT FOR ALL B1.3.1 CHECKS.
-If geotech report confirms assumptions (e.g., Cu=70 kPa), DO NOT FLAG B1.3.1 geotech issues.
-
 For EACH non-compliant item:
-- Page X
+- FILE NAME + PAGE NUMBER
 - Clause (e.g., E1.3.1)
 - Issue description
 - SUGGESTED FIX
-- ALTERNATIVE
+- ALTERNATIVE (if main fix is impractical)
 
-CHECK ALL CLAUSES:
+CHECK:
 E1, E2, E3, B1, B2, D1, D2, F1–F9, G1–G15, H1
 Council: height, coverage, setbacks, zoning
-Weathertightness: flashing, cladding, junctions
-
-DO NOT INCLUDE FILE NAME OR ADDRESS.
+Geotech: soil bearing, liquefaction
+H1: R-values, thermal bridging
 
 ONLY bullet points. NO summary."""},
                         {"role": "user", "content": plan_text}
@@ -119,14 +113,14 @@ ONLY bullet points. NO summary."""},
 
 Check every flag in the report.
 
-If flag is CORRECT → keep it
-If flag is WRONG or MISSING → correct or add the right one
+If the flag is CORRECT → keep it
+If the flag is WRONG or MISSING → correct or add the right one
 
 Be brutal. Fix every mistake.
 
 Output ONLY the FINAL 100% CORRECT report in the same format.
 
-NO explanations."""},
+NO explanations. NO "this is correct" — just the clean report."""},
                         {"role": "user", "content": f"REPORT TO CHECK:\n{report}\n\nPLANS:\n{plan_text}"}
                     ]
                 )
