@@ -11,12 +11,12 @@ st.markdown("""
     .stButton>button { background-color: #0066cc; color: white; font-weight: bold; border-radius: 8px; padding: 0.7rem 1.4rem; font-size: 1.1rem; width: 100%; margin: 0.5rem 0; }
     .stFileUploader > div > div { background-color: #e9f2ff; border-radius: 8px; padding: 1rem; border: 2px dashed #99ccff; }
     h1 { color: #003366; text-align: center; }
-    .final-report { background-color: #e8f5e8; padding: 2rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.1rem; }
+    .final-report { background-color: #e8f5e8; padding: 1.5rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.1rem; line-height: 1.6; }
     .footer { text-align: center; margin-top: 4rem; color: #666; font-size: 0.9rem; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("xAI Plan Checker PRO — Grok-4.1")
+st.title("xAI Plan Checker PRO — Grok-beta")
 
 # Get key
 api_key = os.environ.get("XAI_API_KEY")
@@ -76,11 +76,11 @@ if rfi_file:
 # === COMPLIANCE CHECK + FACT CHECK + FINAL REPORT ===
 if check_compliance and other_files:
     if plan_text.strip():
-        with st.spinner("Creating 100% Verified Report with Grok-4.1..."):
+        with st.spinner("Creating 100% Verified Report with Grok-beta..."):
             try:
                 # First: Run compliance check
                 response = client.chat.completions.create(
-                    model="grok-4.1",
+                    model="grok-beta",
                     messages=[
                         {"role": "system", "content": """You are a NZBC compliance auditor with 30 years experience.
 
@@ -109,7 +109,7 @@ ONLY bullet points. NO summary."""},
 
                 # Second: Fact check & fix
                 fact_check = client.chat.completions.create(
-                    model="grok-4.1",
+                    model="grok-beta",
                     messages=[
                         {"role": "system", "content": """You are the FACT CHECKER.
 
@@ -129,9 +129,9 @@ NO explanations. NO "this is correct" — just the clean report."""},
                 final_report = fact_check.choices[0].message.content
 
                 st.balloons()
-                st.success("100% VERIFIED REPORT READY (Grok-4.1)")
+                st.success("100% VERIFIED REPORT READY (Grok-beta)")
                 with st.container():
-                    st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT (Grok-4.1)</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT (Grok-beta)</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"API Error: {e}")
     else:
@@ -140,10 +140,10 @@ NO explanations. NO "this is correct" — just the clean report."""},
 # === RFI RESPONSE ===
 if check_rfi and rfi_file:
     if rfi_text:
-        with st.spinner("Analyzing RFI with Grok-4.1..."):
+        with st.spinner("Analyzing RFI with Grok-beta..."):
             try:
                 response = client.chat.completions.create(
-                    model="grok-4.1",
+                    model="grok-beta",
                     messages=[
                         {"role": "system", "content": """You are a NZBC compliance engineer.
 
@@ -166,4 +166,4 @@ ONLY bullet points."""},
         st.warning("No text found in RFI.")
 
 # Footer
-st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-4.1</div>", unsafe_allow_html=True)
+st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-beta</div>", unsafe_allow_html=True)
