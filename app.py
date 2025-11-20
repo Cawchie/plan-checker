@@ -32,12 +32,12 @@ uploaded_files = st.file_uploader("Drag & drop all PDFs here", type="pdf", accep
 
 # Separate RFI detection
 rfi_file = None
-plan_files = []
+other_files = []
 for f in uploaded_files or []:
     if "rfi" in f.name.lower() or "request for information" in f.name.lower():
         rfi_file = f
     else:
-        plan_files.append(f)
+        other_files.append(f)
 
 # === BUTTONS ===
 col1, col2 = st.columns(2)
@@ -48,12 +48,12 @@ with col1:
 with col2:
     check_rfi = st.button("RFI RESPONSE", type="secondary")
 
-# === EXTRACT TEXT ===
+# === EXTRACT TEXT ONCE ===
 plan_text = ""
 rfi_text = ""
 
-if uploaded_files:
-    for f in plan_files:
+if other_files:
+    for f in other_files:
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
             for page_num, page in enumerate(reader.pages, 1):
@@ -63,25 +63,26 @@ if uploaded_files:
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
-    if rfi_file:
-        try:
-            reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
-            for page_num, page in enumerate(reader.pages, 1):
-                t = page.extract_text() or ""
-                if t.strip():
-                    rfi_text += f"--- RFI: {rfi_file.name} - Page {page_num} ---\n{t}\n"
-        except Exception as e:
-            st.error(f"Failed to read RFI: {e}")
+if rfi_file:
+    try:
+        reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
+        for page_num, page in enumerate(reader.pages, 1):
+            t = page.extract_text() or ""
+            if t.strip():
+                rfi_text += f"--- RFI: {rfi_file.name} - Page {page_num} ---\n{t}\n"
+    except Exception as e:
+        st.error(f"Failed to read RFI: {e}")
 
 # === COMPLIANCE CHECK + FACT CHECK + FINAL REPORT ===
-if check_compliance and plan_text:
-    with st.spinner("Creating 100% Verified Report..."):
-        try:
-            # First: Run compliance check
-            response = client.chat.completions.create(
-                model="grok-3",
-                messages=[
-                    {"role": "system", "content": """You are a NZBC compliance auditor with 20 years experience.
+if check_compliance and other_files:
+    if plan_text.strip():
+        with st.spinner("Creating 100% Verified Report..."):
+            try:
+                # First: Run compliance check
+                response = client.chat.completions.create(
+                    model="grok-3",
+                    messages=[
+                        {"role": "system", "content": """You are a NZBC compliance auditor with 20 years experience.
 
 CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
 
@@ -99,16 +100,16 @@ Geotech: soil bearing, liquefaction
 H1: R-values, thermal bridging
 
 ONLY bullet points. NO summary."""},
-                    {"role": "user", "content": plan_text}
-                ]
-            )
-            report = response.choices[0].message.content
+                        {"role": "user", "content": plan_text}
+                    ]
+                )
+                report = response.choices[0].message.content
 
-            # Second: Fact check & fix
-            fact_check = client.chat.completions.create(
-                model="grok-3",
-                messages=[
-                    {"role": "system", "content": """You are the FACT CHECKER.
+                # Second: Fact check & fix
+                fact_check = client.chat.completions.create(
+                    model="grok-3",
+                    messages=[
+                        {"role": "system", "content": """You are the FACT CHECKER.
 
 Check every flag in the report.
 
@@ -120,26 +121,29 @@ Be brutal. Fix every mistake.
 Output ONLY the FINAL 100% CORRECT report in the same format.
 
 NO explanations. NO "this is correct" — just the clean report."""},
-                    {"role": "user", "content": f"REPORT TO CHECK:\n{report}\n\nPLANS:\n{plan_text}"}
-                ]
-            )
-            final_report = fact_check.choices[0].message.content
+                        {"role": "user", "content": f"REPORT TO CHECK:\n{report}\n\nPLANS:\n{plan_text}"}
+                    ]
+                )
+                final_report = fact_check.choices[0].message.content
 
-            st.balloons()
-            st.success("100% VERIFIED REPORT READY")
-            with st.container():
-                st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
-        except Exception as e:
-            st.error(f"API Error: {e}")
+                st.balloons()
+                st.success("100% VERIFIED REPORT READY")
+                with st.container():
+                    st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"API Error: {e}")
+    else:
+        st.warning("No text found in plans.")
 
 # === RFI RESPONSE ===
-if check_rfi and rfi_text:
-    with st.spinner("Analyzing RFI..."):
-        try:
-            response = client.chat.completions.create(
-                model="grok-3",
-                messages=[
-                    {"role": "system", "content": """You are a NZBC compliance engineer.
+if check_rfi and rfi_file:
+    if rfi_text:
+        with st.spinner("Analyzing RFI..."):
+            try:
+                response = client.chat.completions.create(
+                    model="grok-3",
+                    messages=[
+                        {"role": "system", "content": """You are a NZBC compliance engineer.
 
 FOR EACH RFI POINT:
 1. QUOTE RFI
@@ -148,14 +152,16 @@ FOR EACH RFI POINT:
 4. IF NOT: FIX + ALTERNATIVE
 
 ONLY bullet points."""},
-                    {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{plan_text}"}
-                ]
-            )
-            st.success("RFI Response Complete")
-            with st.container():
-                st.markdown(f"<div class='report'>{response.choices[0].message.content}</div>", unsafe_allow_html=True)
-        except Exception as e:
-            st.error(f"API Error: {e}")
+                        {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{plan_text}"}
+                    ]
+                )
+                st.success("RFI Response Complete")
+                with st.container():
+                    st.markdown(f"<div class='report'>{response.choices[0].message.content}</div>", unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"API Error: {e}")
+    else:
+        st.warning("No text found in RFI.")
 
 # Footer
 st.markdown("<div class='footer'>xAI Plan Checker © 2025 | Powered by grok-3</div>", unsafe_allow_html=True)
