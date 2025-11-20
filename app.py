@@ -38,6 +38,9 @@ support_files = st.file_uploader("Upload geotech, H1 calcs, etc.", type=["pdf", 
 st.header("Upload RFI (Optional)")
 rfi_file = st.file_uploader("Upload RFI document", type="pdf", accept_multiple_files=False, key="rfi")
 
+# Combine non-RFI files
+files = plan_files + support_files
+
 # === BUTTONS ===
 col1, col2 = st.columns(2)
 
@@ -51,8 +54,8 @@ with col2:
 plan_text = ""
 rfi_text = ""
 
-if plan_files or support_files or rfi_file:
-    for f in (plan_files or []) + (support_files or []):
+if files or rfi_file:
+    for f in files:
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
             for page_num, page in enumerate(reader.pages, 1):
@@ -65,17 +68,15 @@ if plan_files or support_files or rfi_file:
     if rfi_file:
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
-            for page_num = 1
-            for page in reader.pages:
+            for page_num, page in enumerate(reader.pages, 1):
                 t = page.extract_text() or ""
                 if t.strip():
-                    rfi_text += f"--- RFI Page {page_num} ---\n{t}\n"
-                page_num += 1
+                    rfi_text += f"--- RFI: {rfi_file.name} - Page {page_num} ---\n{t}\n"
         except Exception as e:
             st.error(f"Failed to read RFI: {e}")
 
 # === COMPLIANCE CHECK + FACT CHECK + FINAL REPORT ===
-if check_compliance and (plan_files or support_files):
+if check_compliance and files:
     if plan_text.strip():
         with st.spinner("Creating 100% Verified Report..."):
             try:
