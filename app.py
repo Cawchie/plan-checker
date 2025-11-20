@@ -16,7 +16,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("xAI Plan Checker PRO")
+st.title("xAI Plan Checker PRO — Grok-4.1")
 
 # Get key
 api_key = os.environ.get("XAI_API_KEY")
@@ -26,7 +26,7 @@ if not api_key:
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-# === SINGLE UPLOAD BOX ===
+# === SINGLE UPLOAD BOX FOR EVERYTHING ===
 st.header("Upload All Files (Plans, Geotech, H1, RFI)")
 uploaded_files = st.file_uploader("Drag & drop all PDFs here", type="pdf", accept_multiple_files=True, key="all_files")
 
@@ -34,7 +34,7 @@ uploaded_files = st.file_uploader("Drag & drop all PDFs here", type="pdf", accep
 rfi_file = None
 other_files = []
 for f in uploaded_files or []:
-    if "rfi" in f.name.lower():
+    if "rfi" in f.name.lower() or "request for information" in f.name.lower():
         rfi_file = f
     else:
         other_files.append(f)
@@ -73,68 +73,65 @@ if rfi_file:
     except Exception as e:
         st.error(f"Failed to read RFI: {e}")
 
-# === COMPLIANCE CHECK — MAX THOROUGHNESS (10 ISSUES PER CLAUSE) ===
+# === COMPLIANCE CHECK + FACT CHECK + FINAL REPORT ===
 if check_compliance and other_files:
     if plan_text.strip():
-        with st.spinner("Creating 100% Verified Report..."):
+        with st.spinner("Creating 100% Verified Report with Grok-4.1..."):
             try:
+                # First: Run compliance check
                 response = client.chat.completions.create(
-                    model="grok-3",
+                    model="grok-4.1",
                     messages=[
                         {"role": "system", "content": """You are a NZBC compliance auditor with 30 years experience.
 
+CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
+
+For EACH non-compliant item:
+- FILE NAME + PAGE NUMBER
+- Clause (e.g., E1.3.1)
+- Issue description
+- SUGGESTED FIX
+- ALTERNATIVE (if main fix is impractical)
+
+CHECK ALL CLAUSES:
+E1, E2, E3, B1, B2, D1, D2, F1–F9, G1–G15, H1
+Council: height, coverage, setbacks, zoning
+Geotech: soil bearing, liquefaction
+H1: R-values, thermal bridging
+
 BE EXTREMELY THOROUGH.
 
-For EVERY NZBC clause (E1, E2, E3, B1, B2, D1, D2, F7, G4, G12, G13, H1, C3, etc.), list UP TO 10 specific issues.
-
-If fewer than 10 issues in a clause, write "Only X issues found for [clause]" at the end of that clause.
-
-Structure:
-**Clause E2 – External Moisture**
-- Issue 1: ...
-  Suggested Fix: ...
-  Alternative: ...
-- Issue 2: ...
-  ...
-- Only 7 issues found for E2
-
-Do this for every clause that has issues.
-
-If a clause has no issues, say "**Clause E2 – External Moisture**: No issues found"
-
-Cover ALL clauses.
-
-Be brutal — find every possible minor issue.
-
-ONLY use this format. NO intro text."""},
+ONLY bullet points. NO summary."""},
                         {"role": "user", "content": plan_text}
                     ]
                 )
                 report = response.choices[0].message.content
 
-                # Fact check
+                # Second: Fact check & fix
                 fact_check = client.chat.completions.create(
-                    model="grok-3",
+                    model="grok-4.1",
                     messages=[
                         {"role": "system", "content": """You are the FACT CHECKER.
 
-Check every flag.
+Check every flag in the report.
 
-If correct → keep it
-If wrong or missing → fix or add
+If the flag is CORRECT → keep it
+If the flag is WRONG or MISSING → correct or add the right one
 
-Output ONLY the FINAL 100% CORRECT report in the exact same format.
+Be brutal. Fix every mistake.
 
-NO explanations."""},
+Output ONLY the FINAL 100% CORRECT report in the same format.
+
+NO explanations. NO "this is correct" — just the clean report."""},
                         {"role": "user", "content": f"REPORT TO CHECK:\n{report}\n\nPLANS:\n{plan_text}"}
                     ]
                 )
                 final_report = fact_check.choices[0].message.content
 
                 st.balloons()
-                st.success("100% VERIFIED REPORT READY")
+                st.success("100% VERIFIED REPORT READY (Grok-4.1)")
                 with st.container():
-                    st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT (Grok-4.1)</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"API Error: {e}")
     else:
@@ -143,10 +140,10 @@ NO explanations."""},
 # === RFI RESPONSE ===
 if check_rfi and rfi_file:
     if rfi_text:
-        with st.spinner("Analyzing RFI..."):
+        with st.spinner("Analyzing RFI with Grok-4.1..."):
             try:
                 response = client.chat.completions.create(
-                    model="grok-3",
+                    model="grok-4.1",
                     messages=[
                         {"role": "system", "content": """You are a NZBC compliance engineer.
 
@@ -169,4 +166,4 @@ ONLY bullet points."""},
         st.warning("No text found in RFI.")
 
 # Footer
-st.markdown("<div class='footer'>xAI Plan Checker © 2025 | Powered by grok-3</div>", unsafe_allow_html=True)
+st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-4.1</div>", unsafe_allow_html=True)
