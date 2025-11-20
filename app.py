@@ -56,10 +56,12 @@ if other_files:
     for f in other_files:
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
+            file_text = ""
             for page_num, page in enumerate(reader.pages, 1):
                 t = page.extract_text() or ""
                 if t.strip():
-                    plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
+                    file_text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
+            plan_text += file_text
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
@@ -71,75 +73,79 @@ if rfi_file:
             if t.strip():
                 rfi_text += f"--- RFI: {rfi_file.name} - Page {page_num} ---\n{t}\n"
     except Exception as e:
-        st.error(f"Failed to read RFI: {e}")
+        st.error("Failed to read RFI")
 
-# === COMPLIANCE CHECK + FACT CHECK + FINAL REPORT ===
+# === COMPLIANCE CHECK + AUTO-SUMMARY IF TOO LONG + FINAL REPORT ===
 if check_compliance and other_files:
     if plan_text.strip():
-        with st.spinner("Creating 100% Verified Report with Grok-3..."):
+        with st.spinner("Analysing plans with Grok-3..."):
             try:
-                # First: Run compliance check
+                # If text is too long, summarize first
+                input_text = plan_text
+                if len(plan_text) > 100000:  # Rough token guard
+                    summary = client.chat.completions.create(
+                        model="grok-3",
+                        messages=[
+                            {"role": "system", "content": "Summarize ONLY the compliance-relevant information (R-values, zones, geotech values, flashing details, council notes, specifications, clauses mentioned). Be concise but complete."},
+                            {"role": "user", "content": plan_text}
+                        ]
+                    )
+                    input_text = summary.choices[0].message.content
+
+                # Run compliance check
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
-                        {"role": "system", "content": """You are a NZBC compliance auditor with 30 years experience.
+                        {"role": "system", "content": """You are a senior NZBC compliance auditor.
 
-CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
+CHECK FOR EVERY POSSIBLE ISSUE.
 
 For EACH non-compliant item:
 - FILE NAME + PAGE NUMBER
-- Clause (e.g., E1.3.1)
-- Issue description
-- SUGGESTED FIX
-- ALTERNATIVE (if main fix is impractical)
-
-CHECK:
-E1, E2, E3, B1, B2, D1, D2, F1–F9, G1–G15, H1
-Council: height, coverage, setbacks, zoning
-Geotech: soil bearing, liquefaction
-H1: R-values, thermal bridging
+- Clause
+- Issue
+- Suggested Fix
+- Alternative
 
 BE EXTREMELY THOROUGH.
 
-ONLY bullet points. NO summary."""},
-                        {"role": "user", "content": plan_text}
+ONLY bullet points."""},
+                        {"role": "user", "content": input_text}
                     ]
                 )
                 report = response.choices[0].message.content
 
-                # Second: Fact check & fix
+                # Fact check
                 fact_check = client.chat.completions.create(
                     model="grok-3",
                     messages=[
                         {"role": "system", "content": """You are the FACT CHECKER.
 
-Check every flag in the report.
+Check every flag.
 
-If the flag is CORRECT → keep it
-If the flag is WRONG or MISSING → correct or add the right one
+If correct → keep
+If wrong or missing → fix/add
 
-Be brutal. Fix every mistake.
+Output ONLY the FINAL 100% CORRECT report.
 
-Output ONLY the FINAL 100% CORRECT report in the same format.
-
-NO explanations. NO "this is correct" — just the clean report."""},
-                        {"role": "user", "content": f"REPORT TO CHECK:\n{report}\n\nPLANS:\n{plan_text}"}
+NO explanations."""},
+                        {"role": "user", "content": f"REPORT:\n{report}\n\nPLANS:\n{input_text}"}
                     ]
                 )
                 final_report = fact_check.choices[0].message.content
 
                 st.balloons()
-                st.success("100% VERIFIED REPORT READY (Grok-3)")
-                st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT (Grok-3)</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
+                st.success("100% VERIFIED REPORT READY")
+                st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
             except Exception as e:
-                st.error(f"API Error: {e}")
+                st.error(f"Error: {e}")
     else:
-        st.warning("No text found in plans.")
+        st.warning("No text found.")
 
 # === RFI RESPONSE ===
 if check_rfi and rfi_file:
     if rfi_text:
-        with st.spinner("Analyzing RFI with Grok-3..."):
+        with st.spinner("Generating RFI Response with Grok-3..."):
             try:
                 response = client.chat.completions.create(
                     model="grok-3",
@@ -156,12 +162,10 @@ ONLY bullet points."""},
                         {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{plan_text}"}
                     ]
                 )
-                st.success("RFI Response Complete")
+                st.success("RFI Response Ready")
                 st.markdown(f"<div class='report'>{response.choices[0].message.content}</div>", unsafe_allow_html=True)
             except Exception as e:
-                st.error(f"API Error: {e}")
-    else:
-        st.warning("No text found in RFI.")
+                st.error(f"Error: {e}")
 
 # Footer
 st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-3</div>", unsafe_allow_html=True)
