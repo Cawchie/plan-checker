@@ -1,11 +1,10 @@
-import streamlit = st
-
+import streamlit as st
 from openai import OpenAI
 import PyPDF2
 import io
 import os
 
-# === PRO LOOK ===
+# === PRO LOOK (CSS) ===
 st.markdown("""
 <style>
     .main { background-color: #f8f9fa; padding: 2rem; border-radius: 10px; }
@@ -19,18 +18,19 @@ st.markdown("""
 
 st.title("xAI Plan Checker PRO — Grok-4.1")
 
+# Get key
 api_key = os.environ.get("XAI_API_KEY")
 if not api_key:
-    st.error("API key missing!")
+    st.error("API key missing! Add XAI_API_KEY in Settings.")
     st.stop()
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-# SINGLE UPLOAD BOX
+# === SINGLE UPLOAD BOX ===
 st.header("Upload All Files (Plans, Geotech, H1, RFI)")
-uploaded_files = st.file_uploader("Drag & drop all PDFs", type="pdf", accept_multiple_files=True, key="all")
+uploaded_files = st.file_uploader("Drag & drop all PDFs here", type="pdf", accept_multiple_files=True, key="all_files")
 
-# Auto-detect RFI
+# Separate RFI detection
 rfi_file = None
 other_files = []
 for f in uploaded_files or []:
@@ -39,14 +39,16 @@ for f in uploaded_files or []:
     else:
         other_files.append(f)
 
-# BUTTONS
+# === BUTTONS ===
 col1, col2 = st.columns(2)
-with col1:
-    compliance = st.button("COMPLIANCE CHECK", type="primary")
-with col2:
-    rfi = st.button("RFI RESPONSE", type="secondary")
 
-# EXTRACT TEXT
+with col1:
+    check_compliance = st.button("COMPLIANCE CHECK", type="primary")
+
+with col2:
+    check_rfi = st.button("RFI RESPONSE", type="secondary")
+
+# === EXTRACT TEXT ONCE ===
 plan_text = ""
 rfi_text = ""
 
@@ -58,8 +60,8 @@ if other_files:
                 t = page.extract_text() or ""
                 if t.strip():
                     plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n"
-        except:
-            st.error(f"Failed to read {f.name}")
+        except Exception as e:
+            st.error(f"Failed to read {f.name}: {e}")
 
 if rfi_file:
     try:
@@ -67,71 +69,78 @@ if rfi_file:
         for page_num, page in enumerate(reader.pages, 1):
             t = page.extract_text() or ""
             if t.strip():
-                rfi_text += f"--- RFI Page {page_num} ---\n{t}\n"
-    except:
-        st.error("Failed to read RFI")
+                rfi_text += f"--- RFI: {rfi_file.name} - Page {page_num} ---\n{t}\n"
+    except Exception as e:
+        st.error(f"Failed to read RFI: {e}")
 
-# COMPLIANCE CHECK + FACT CHECK + FINAL REPORT
-if compliance and other_files:
+# === COMPLIANCE CHECK + FACT CHECK + FINAL REPORT ===
+if check_compliance and other_files:
     if plan_text.strip():
-        with st.spinner("Running Grok-4.1 Compliance Check + Fact Check..."):
+        with st.spinner("Creating 100% Verified Report with Grok-4.1..."):
             try:
-                # Step 1: Generate report
+                # First: Run compliance check
                 response = client.chat.completions.create(
                     model="grok-4.1",
                     messages=[
-                        {"role": "system", "content": """You are a senior NZBC compliance auditor.
+                        {"role": "system", "content": """You are a NZBC compliance auditor with 30 years experience.
 
-CHECK EVERY PAGE FOR EVERY POSSIBLE ISSUE.
+CHECK EVERY SINGLE PAGE FOR EVERY POSSIBLE ISSUE.
 
 For EACH non-compliant item:
-- Page X
-- Clause
-- Issue
-- Suggested Fix
-- Alternative
+- FILE NAME + PAGE NUMBER
+- Clause (e.g., E1.3.1)
+- Issue description
+- SUGGESTED FIX
+- ALTERNATIVE (if main fix is impractical)
+
+CHECK:
+E1, E2, E3, B1, B2, D1, D2, F1–F9, G1–G15, H1
+Council: height, coverage, setbacks, zoning
+Geotech: soil bearing, liquefaction
+H1: R-values, thermal bridging
 
 BE EXTREMELY THOROUGH.
 
-If geotech report is uploaded — use it to verify B1 assumptions. If matches, DO NOT FLAG.
-
-ONLY bullet points."""},
+ONLY bullet points. NO summary."""},
                         {"role": "user", "content": plan_text}
                     ]
                 )
                 report = response.choices[0].message.content
 
-                # Step 2: Fact check
+                # Second: Fact check & fix
                 fact_check = client.chat.completions.create(
                     model="grok-4.1",
                     messages=[
                         {"role": "system", "content": """You are the FACT CHECKER.
 
-Check every flag.
+Check every flag in the report.
 
-If correct → keep
-If wrong or missing → fix/add
+If the flag is CORRECT → keep it
+If the flag is WRONG or MISSING → correct or add the right one
 
-Output ONLY the FINAL 100% CORRECT report.
+Be brutal. Fix every mistake.
 
-NO explanations."""},
-                        {"role": "user", "content": f"REPORT:\n{report}\n\nPLANS:\n{plan_text}"}
+Output ONLY the FINAL 100% CORRECT report in the same format.
+
+NO explanations. NO "this is correct" — just the clean report."""},
+                        {"role": "user", "content": f"REPORT TO CHECK:\n{report}\n\nPLANS:\n{plan_text}"}
                     ]
                 )
                 final_report = fact_check.choices[0].message.content
 
                 st.balloons()
-                st.success("100% VERIFIED REPORT READY")
-                st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
+                st.success("100% VERIFIED REPORT READY (Grok-4.1)")
+                with st.container():
+                    st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT (Grok-4.1)</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"API Error: {e}")
     else:
-        st.warning("No text found.")
+        st.warning("No text found in plans.")
 
-# RFI RESPONSE
-if rfi and rfi_file:
+# === RFI RESPONSE ===
+if check_rfi and rfi_file:
     if rfi_text:
-        with st.spinner("Generating RFI Response with Grok-4.1..."):
+        with st.spinner("Analyzing RFI with Grok-4.1..."):
             try:
                 response = client.chat.completions.create(
                     model="grok-4.1",
@@ -148,11 +157,13 @@ ONLY bullet points."""},
                         {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{plan_text}"}
                     ]
                 )
-                st.success("RFI Response Ready")
-                st.markdown(f"<div class='final-report'>{response.choices[0].message.content}</div>", unsafe_allow_html=True)
+                st.success("RFI Response Complete")
+                with st.container():
+                    st.markdown(f"<div class='report'>{response.choices[0].message.content}</div>", unsafe_allow_html=True)
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"API Error: {e}")
+    else:
+        st.warning("No text found in RFI.")
 
-st)
-
+# Footer
 st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-4.1</div>", unsafe_allow_html=True)
