@@ -130,7 +130,7 @@ NO explanations. NO "this is correct" — just the clean report."""},
 
                 st.balloons()
                 st.success("100% VERIFIED REPORT READY (Grok-3)")
-                with st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT (Grok-3)</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='final-report'><strong>FINAL 100% CORRECT REPORT (Grok-3)</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"API Error: {e}")
     else:
@@ -157,8 +157,7 @@ ONLY bullet points."""},
                     ]
                 )
                 st.success("RFI Response Complete")
-                with st.container():
-                    st.markdown(f"<div class='report'>{response.choices[0].message.content}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='report'>{response.choices[0].message.content}</div>", unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"API Error: {e}")
     else:
