@@ -26,6 +26,7 @@ st.markdown("""
     .stFileUploader > div > div {background-color: #e9f2ff; border-radius: 8px; padding: 1rem; border: 2px dashed #99ccff;}
     h1 {color: #003366; text-align: center;}
     .final-report {background-color: #e8f5e8; padding: 2rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.1rem; line-height: 1.6;}
+    .detailed-report {background-color: #f0f8ff; padding: 2rem; border-left: 8px solid #007bff; border-radius: 8px; margin: 2rem 0;}
     .footer {text-align: center; margin-top: 4rem; color: #666; font-size: 0.9rem;}
     .watermark {position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 56px; font-weight: bold; color: rgba(0, 102, 204, 0.13); pointer-events: none; z-index: 9999; white-space: nowrap;}
 </style>
@@ -61,8 +62,6 @@ with col2:
 watermark = st.empty()
 
 plan_text = ""
-rfi_text = ""
-
 if other_files:
     for f in other_files:
         try:
@@ -74,71 +73,59 @@ if other_files:
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
-if rfi_file:
-    try:
-        reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
-        for page_num, page in enumerate(reader.pages, 1):
-            t = page.extract_text() or ""
-            if t.strip():
-                rfi_text += f"--- RFI Page {page_num} ---\n{t}\n\n"
-    except Exception as e:
-        st.error("Failed to read RFI")
+if check_compliance and plan_text:
+    watermark.markdown(f'<div class="watermark">{random.choice(PHRASES)}</div>', unsafe_allow_html=True)
+    with st.spinner("Grok-3 analysing every detail..."):
+        try:
+            # First pass
+            response = client.chat.completions.create(
+                model="grok-3",
+                messages=[
+                    {"role": "system", "content": "You are an NZBC auditor. List every possible non-compliance in bullet points with clause, issue, fix."},
+                    {"role": "user", "content": plan_text}
+                ]
+            )
+            raw_report = response.choices[0].message.content
 
-if check_compliance:
-    if plan_text:
-        watermark.markdown(f'<div class="watermark">{random.choice(PHRASES)}</div>', unsafe_allow_html=True)
-        with st.spinner("Grok-3 analysing every detail..."):
-            try:
-                # Step 1: First pass
-                response = client.chat.completions.create(
-                    model="grok-3",
-                    messages=[
-                        {"role": "system", "content": "You are an NZBC auditor. List every possible non-compliance in bullet points with clause, issue, fix."},
-                        {"role": "user", "content": plan_text}
-                    ]
-                )
-                raw_report = response.choices[0].message.content
+            # Nuclear fact checker — kills false flags
+            fact_check = client.chat.completions.create(
+                model="grok-3",
+                messages=[
+                    {"role": "system", "content": """You are the FINAL FACT CHECKER.
+                    - Red box notes = 100% compliant
+                    - Any mention of smoke detectors, hush, interconnected, NZS 4514, AS 3786 = F7 compliant
+                    - Any mention of mechanical ventilation, ducted, 27L/s, 50L/s, V symbol = G4 compliant
+                    Remove every false positive.
+                    Output TWO versions:
+                    1. SHORT CLIENT VERSION — plain English, short, friendly
+                    2. FULL DETAILED VERSION — everything, for the designer"""},
+                    {"role": "user", "content": f"RAW REPORT:\n{raw_report}\n\nFULL PLANS:\n{plan_text}"}
+                ]
+            )
+            final_output = fact_check.choices[0].message.content
 
-                # Step 2: NUCLEAR FACT CHECKER — KILLS ALL FALSE FLAGS
-                fact_check = client.chat.completions.create(
-                    model="grok-3",
-                    messages=[
-                        {"role": "system", "content": """You are the FINAL FACT CHECKER.
-                        RULES (never break):
-                        - Red box notes = 100% compliant
-                        - Any note with "smoke", "detector", "alarm", "hush", "interconnected", NZS 4514, AS 3786, SD symbol = F7 fully compliant
-                        - Any note with "mechanical", "ducted", "27L/s", "50L/s", "extract", V symbol = G4 fully compliant
-                        - If it's written anywhere = compliant
-                        Remove every false positive.
-                        Output ONLY the final clean report in short, plain English. If nothing real, say "NO ISSUES FOUND — READY FOR CONSENT"."""},
-                        {"role": "user", "content": f"RAW REPORT:\n{raw_report}\n\nFULL PLANS TEXT:\n{plan_text}"}
-                    ]
-                )
-                final_report = fact_check.choices[0].message.content
+            watermark.empty()
+            st.balloons()
+            st.success("100% ACCURATE REPORT READY")
 
-                watermark.empty()
-                st.balloons()
-                st.success("100% ACCURATE REPORT READY")
+            # Split the output (Grok will separate the two versions clearly)
+            if "SHORT CLIENT VERSION" in final_output:
+                client_report, detailed_report = final_output.split("FULL DETAILED VERSION", 1)
+                client_report = client_report.replace("SHORT CLIENT VERSION", "").strip()
+                detailed_report = "FULL DETAILED VERSION" + detailed_report.strip()
+            else:
+                client_report = final_output
+                detailed_report = final_output
 
-                # Plain-English friendly display
-                friendly_report = f"""
-**xAI PLAN CHECKER PRO — QUICK REPORT**
+            # Client-friendly version
+            st.markdown(f"<div class='final-report'><strong>CLIENT REPORT — EASY READ</strong>\n\n{client_report}</div>", unsafe_allow_html=True)
 
-**Job:** {' / '.join([f.name for f in uploaded_files])}
+            # Full detailed version (collapsible for pros)
+            with st.expander("👀 Show Full Technical Report (for designers & council)", expanded=False):
+                st.markdown(f"<div class='detailed-report'>{detailed_report}</div>", unsafe_allow_html=True)
 
-**RESULT**  
-{final_report}
-
-**Smoke alarms & ventilation?** Already there and perfect (Grok sees the red box note + symbols every time).
-
-You’re good to go! 🚀
-                """
-                st.markdown(f"<div class='final-report'>{friendly_report}</div>", unsafe_allow_html=True)
-
-            except Exception as e:
-                watermark.empty()
-                st.error(f"Error: {e}")
-    else:
-        st.warning("Upload plans first")
+        except Exception as e:
+            watermark.empty()
+            st.error(f"Error: {e}")
 
 st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-3</div>", unsafe_allow_html=True)
