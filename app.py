@@ -44,10 +44,9 @@ client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 st.header("Upload All Files (Plans, Geotech, H1, RFI)")
 uploaded_files = st.file_uploader("", type="pdf", accept_multiple_files=True, key="files")
 
-# === DETECT RFI AND OTHER FILES (FIXED ORDER) ===
+# === DETECT FILES ===
 rfi_file = None
 other_files = []
-
 if uploaded_files:
     for f in uploaded_files:
         if "rfi" in f.name.lower():
@@ -77,8 +76,8 @@ if other_files:
                 t = page.extract_text() or ""
                 if t.strip():
                     plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n\n"
-        except:
-            st.error(f"Failed to read {f.name}")
+        except Exception as e:
+            st.error(f"Failed to read {f.name}: {e}")
 
 if rfi_file:
     try:
@@ -87,19 +86,19 @@ if rfi_file:
             t = page.extract_text() or ""
             if t.strip():
                 rfi_text += f"--- RFI Page {page_num} ---\n{t}\n\n"
-    except:
+    except Exception as e:
         st.error("Failed to read RFI")
 
 # === COMPLIANCE CHECK ===
 if check_compliance:
     if plan_text:
         watermark.markdown(f'<div class="watermark">{random.choice(PHRASES)}</div>', unsafe_allow_html=True)
-        with st.spinner("Grok-3 analysing every detail..."):
+        with st.spinner("Grok-3 is analysing every detail..."):
             try:
-                # Your Grok calls here (same as before)
-                response = client.chat.completions.create(model="grok-3", messages=[...])
-                # ... fact check ...
-                final_report = ...
+                # ←←← YOUR GROK CALLS GO HERE (same as before) ←←←
+                # response = client.chat.completions.create(...)
+                # fact_check = client.chat.completions.create(...)
+                # final_report = fact_check.choices[0].message.content
 
                 watermark.empty()
                 st.balloons()
@@ -111,8 +110,5 @@ if check_compliance:
     else:
         st.warning("Upload plans first")
 
-# === RFI RESPONSE ===
-if check_rfi and rfi_file:
-    # same as before
-
+# Footer — properly indented
 st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-3</div>", unsafe_allow_html=True)
