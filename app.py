@@ -25,8 +25,8 @@ st.markdown("""
     .stButton>button {background-color: #0066cc !important; color: white !important; font-weight: bold; height: 3.5rem; font-size: 1.2rem;}
     .stFileUploader > div > div {background-color: #e9f2ff; border-radius: 8px; padding: 1rem; border: 2px dashed #99ccff;}
     h1 {color: #003366; text-align: center;}
-    .final-report {background-color: #e8f5e8; padding: 2rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.1rem; line-height: 1.6;}
-    .detailed-report {background-color: #f0f8ff; padding: 2rem; border-left: 8px solid #007bff; border-radius: 8px; margin: 2rem 0;}
+    .client-report {background-color: #e8f5e8; padding: 2rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.2rem; line-height: 1.8;}
+    .detailed-report {background-color: #f0f8ff; padding: 2rem; border-left: 8px solid #007bff; border-radius: 8px; margin: 2rem 0; font-size: 1rem;}
     .footer {text-align: center; margin-top: 4rem; color: #666; font-size: 0.9rem;}
     .watermark {position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 56px; font-weight: bold; color: rgba(0, 102, 204, 0.13); pointer-events: none; z-index: 9999; white-space: nowrap;}
 </style>
@@ -87,42 +87,37 @@ if check_compliance and plan_text:
             )
             raw_report = response.choices[0].message.content
 
-            # Nuclear fact checker — kills false flags
+            # FINAL FACT CHECKER — outputs BOTH versions
             fact_check = client.chat.completions.create(
                 model="grok-3",
                 messages=[
                     {"role": "system", "content": """You are the FINAL FACT CHECKER.
-                    - Red box notes = 100% compliant
-                    - Any mention of smoke detectors, hush, interconnected, NZS 4514, AS 3786 = F7 compliant
-                    - Any mention of mechanical ventilation, ducted, 27L/s, 50L/s, V symbol = G4 compliant
-                    Remove every false positive.
-                    Output TWO versions:
-                    1. SHORT CLIENT VERSION — plain English, short, friendly
-                    2. FULL DETAILED VERSION — everything, for the designer"""},
+                    Kill every false positive (smoke alarms, ventilation, red box notes, SD/V symbols = compliant).
+                    Output exactly two sections:
+                    1. CLIENT REPORT — Plain English, short, friendly, reassuring
+                    2. FULL DETAILED REPORT — everything for the designer/council"""},
                     {"role": "user", "content": f"RAW REPORT:\n{raw_report}\n\nFULL PLANS:\n{plan_text}"}
                 ]
             )
-            final_output = fact_check.choices[0].message.content
+            output = fact_check.choices[0].message.content
 
             watermark.empty()
             st.balloons()
             st.success("100% ACCURATE REPORT READY")
 
-            # Split the output (Grok will separate the two versions clearly)
-            if "SHORT CLIENT VERSION" in final_output:
-                client_report, detailed_report = final_output.split("FULL DETAILED VERSION", 1)
-                client_report = client_report.replace("SHORT CLIENT VERSION", "").strip()
-                detailed_report = "FULL DETAILED VERSION" + detailed_report.strip()
+            # Split into two reports
+            if "CLIENT REPORT" in output and "FULL DETAILED REPORT" in output:
+                client_report = output.split("FULL DETAILED REPORT")[0].replace("CLIENT REPORT", "").strip()
+                detailed_report = "FULL DETAILED REPORT" + output.split("FULL DETAILED REPORT")[1].strip()
             else:
-                client_report = final_output
-                detailed_report = final_output
+                client_report = output
+                detailed_report = output
 
-            # Client-friendly version
-            st.markdown(f"<div class='final-report'><strong>CLIENT REPORT — EASY READ</strong>\n\n{client_report}</div>", unsafe_allow_html=True)
+            # CLIENT VERSION (big green box)
+            st.markdown(f"<div class='client-report'><strong>CLIENT REPORT — EASY READ</strong><br><br>{client_report}</div>", unsafe_allow_html=True)
 
-            # Full detailed version (collapsible for pros)
-            with st.expander("👀 Show Full Technical Report (for designers & council)", expanded=False):
-                st.markdown(f"<div class='detailed-report'>{detailed_report}</div>", unsafe_allow_html=True)
+            # FULL VERSION (blue box, always visible)
+            st.markdown(f"<div class='detailed-report'><strong>FULL DETAILED REPORT (for designer/council)</strong><br><br>{detailed_report}</div>", unsafe_allow_html=True)
 
         except Exception as e:
             watermark.empty()
