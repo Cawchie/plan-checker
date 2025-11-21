@@ -5,7 +5,7 @@ import io
 import os
 import random
 
-# === RANDOM PHRASES ===
+# === FUNNY PHRASES ===
 PHRASES = [
     "Might be a lil while, grab a coffee ☕",
     "Grok is reading every note like a boss…",
@@ -34,31 +34,74 @@ st.markdown("""
 
 st.title("xAI Plan Checker PRO — Grok-3")
 
+api_key = os.environ.get("XAI_API_KEY")
+if not api_key:
+    st.error("API key missing!")
+    st.stop()
+
+client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
+
 st.header("Upload All Files (Plans, Geotech, H1, RFI)")
 uploaded_files = st.file_uploader("", type="pdf", accept_multiple_files=True, key="files")
 
-# === FORCE BUTTONS TO ALWAYS SHOW ===
+# === DETECT RFI AND OTHER FILES (FIXED ORDER) ===
+rfi_file = None
+other_files = []
+
+if uploaded_files:
+    for f in uploaded_files:
+        if "rfi" in f.name.lower():
+            rfi_file = f
+        else:
+            other_files.append(f)
+
+# === BUTTONS ===
 col1, col2 = st.columns(2)
 with col1:
-    check_compliance = st.button("COMPLIANCE CHECK", type="primary", use_container_width=True, key="compliance")
+    check_compliance = st.button("COMPLIANCE CHECK", type="primary", use_container_width=True)
 with col2:
-    check_rfi = st.button("RFI RESPONSE", type="secondary", use_container_width=True, key="rfi")
+    check_rfi = st.button("RFI RESPONSE", type="secondary", use_container_width=True)
 
-# Watermark placeholder — only visible during processing
+# Watermark placeholder
 watermark = st.empty()
 
-# === YOUR EXISTING EXTRACTION CODE HERE (unchanged) ===
-# ... [all your file reading, plan_text, rfi_text, etc.] ...
+# === EXTRACT TEXT ===
+plan_text = ""
+rfi_text = ""
 
-if check_compliance and other_files:
-    if plan_text.strip():
-        # Show watermark + spinner
+if other_files:
+    for f in other_files:
+        try:
+            reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
+            for page_num, page in enumerate(reader.pages, 1):
+                t = page.extract_text() or ""
+                if t.strip():
+                    plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n\n"
+        except:
+            st.error(f"Failed to read {f.name}")
+
+if rfi_file:
+    try:
+        reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
+        for page_num, page in enumerate(reader.pages, 1):
+            t = page.extract_text() or ""
+            if t.strip():
+                rfi_text += f"--- RFI Page {page_num} ---\n{t}\n\n"
+    except:
+        st.error("Failed to read RFI")
+
+# === COMPLIANCE CHECK ===
+if check_compliance:
+    if plan_text:
         watermark.markdown(f'<div class="watermark">{random.choice(PHRASES)}</div>', unsafe_allow_html=True)
-        with st.spinner("Grok-3 is analysing every detail..."):
+        with st.spinner("Grok-3 analysing every detail..."):
             try:
-                # ... your Grok calls ...
-                # When done:
-                watermark.empty()  # remove watermark
+                # Your Grok calls here (same as before)
+                response = client.chat.completions.create(model="grok-3", messages=[...])
+                # ... fact check ...
+                final_report = ...
+
+                watermark.empty()
                 st.balloons()
                 st.success("100% ACCURATE REPORT READY")
                 st.markdown(f"<div class='final-report'><strong>FINAL REPORT</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
@@ -66,9 +109,10 @@ if check_compliance and other_files:
                 watermark.empty()
                 st.error(f"Error: {e}")
     else:
-        st.warning("No text found.")
-else:
-    watermark.empty()
+        st.warning("Upload plans first")
 
-# Footer
+# === RFI RESPONSE ===
+if check_rfi and rfi_file:
+    # same as before
+
 st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-3</div>", unsafe_allow_html=True)
