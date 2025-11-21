@@ -36,7 +36,7 @@ st.title("xAI Plan Checker PRO — Grok-3")
 
 api_key = os.environ.get("XAI_API_KEY")
 if not api_key:
-    st.error("API key missing!")
+    st.error("API key missing! Add XAI_API_KEY in Secrets.")
     st.stop()
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
@@ -44,7 +44,7 @@ client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 st.header("Upload All Files (Plans, Geotech, H1, RFI)")
 uploaded_files = st.file_uploader("", type="pdf", accept_multiple_files=True, key="files")
 
-# === DETECT FILES ===
+# Detect files
 rfi_file = None
 other_files = []
 if uploaded_files:
@@ -54,17 +54,16 @@ if uploaded_files:
         else:
             other_files.append(f)
 
-# === BUTTONS ===
+# Buttons
 col1, col2 = st.columns(2)
 with col1:
     check_compliance = st.button("COMPLIANCE CHECK", type="primary", use_container_width=True)
 with col2:
     check_rfi = st.button("RFI RESPONSE", type="secondary", use_container_width=True)
 
-# Watermark placeholder
 watermark = st.empty()
 
-# === EXTRACT TEXT ===
+# Extract text
 plan_text = ""
 rfi_text = ""
 
@@ -89,26 +88,40 @@ if rfi_file:
     except Exception as e:
         st.error("Failed to read RFI")
 
-# === COMPLIANCE CHECK ===
+# COMPLIANCE CHECK
 if check_compliance:
     if plan_text:
         watermark.markdown(f'<div class="watermark">{random.choice(PHRASES)}</div>', unsafe_allow_html=True)
         with st.spinner("Grok-3 is analysing every detail..."):
             try:
-                # ←←← YOUR GROK CALLS GO HERE (same as before) ←←←
-                # response = client.chat.completions.create(...)
-                # fact_check = client.chat.completions.create(...)
-                # final_report = fact_check.choices[0].message.content
+                # First pass
+                response = client.chat.completions.create(
+                    model="grok-3",
+                    messages=[
+                        {"role": "system", "content": "You are a NZBC compliance auditor. List every possible non-compliance in bullet points with file/page, clause, issue, fix."},
+                        {"role": "user", "content": plan_text}
+                    ]
+                )
+                report = response.choices[0].message.content
+
+                # Fact check
+                fact_check = client.chat.completions.create(
+                    model="grok-3",
+                    messages=[
+                        {"role": "system", "content": "You are the FACT CHECKER. Fix every wrong or missing flag. Output ONLY the final perfect report."},
+                        {"role": "user", "content": f"REPORT:\n{report}\n\nPLANS:\n{plan_text}"}
+                    ]
+                )
+                final_report = fact_check.choices[0].message.content
 
                 watermark.empty()
                 st.balloons()
                 st.success("100% ACCURATE REPORT READY")
-                st.markdown(f"<div class='final-report'><strong>FINAL REPORT</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='final-report'><strong>FINAL REPORT — GROK-3</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
             except Exception as e:
                 watermark.empty()
                 st.error(f"Error: {e}")
     else:
         st.warning("Upload plans first")
 
-# Footer — properly indented
 st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-3</div>", unsafe_allow_html=True)
