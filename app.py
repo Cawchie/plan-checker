@@ -5,7 +5,7 @@ import io
 import os
 import random
 
-# === RANDOM FUNNY PHRASES ===
+# === FUNNY RANDOM PHRASES ===
 PHRASES = [
     "Might be a lil while, grab a coffee ☕",
     "Grok is reading every note like a boss…",
@@ -23,19 +23,17 @@ PHRASES = [
     "Consent loading… 99%… (it’s a lie, it’s 100%)"
 ]
 
-# === PRO LOOK + 45° WATERMARK ===
+# === CSS + WATERMARK THAT ONLY APPEARS DURING SPINNER ===
 st.markdown(f"""
 <style>
     .main {{
         background-color: #f8f9fa;
         padding: 2rem;
         border-radius: 10px;
-        position: relative;
-        overflow: hidden;
     }}
     .stButton>button {{
-        background-color: #0066cc;
-        color: white;
+        background-color: #0066cc !important;
+        color: white !important;
         font-weight: bold;
         border-radius: 8px;
         padding: 0.7rem 1.4rem;
@@ -49,10 +47,7 @@ st.markdown(f"""
         padding: 1rem;
         border: 2px dashed #99ccff;
     }}
-    h1 {{
-        color: #003366;
-        text-align: center;
-    }}
+    h1 {{ color: #003366; text-align: center; }}
     .final-report {{
         background-color: #e8f5e8;
         padding: 2rem;
@@ -62,45 +57,64 @@ st.markdown(f"""
         font-size: 1.1rem;
         line-height: 1.6;
     }}
-    .footer {{
-        text-align: center;
-        margin-top: 4rem;
-        color: #666;
-        font-size: 0.9rem;
-    }}
-    .watermark {{
-        position: absolute;
+    .footer {{ text-align: center; margin-top: 4rem; color: #666; font-size: 0.9rem; }}
+    .thinking-watermark {{
+        position: fixed;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%) rotate(-45deg);
-        font-size: 48px;
+        font-size: 52px;
         font-weight: bold;
-        color: rgba(0, 102, 204, 0.1);
+        color: rgba(0, 102, 204, 0.12);
         pointer-events: none;
         white-space: nowrap;
-        z-index: 1;
+        z-index: 9999;
         font-family: 'Helvetica Neue', sans-serif;
     }}
 </style>
-<div class="watermark">{random.choice(PHRASES)}</div>
 """, unsafe_allow_html=True)
 
 st.title("xAI Plan Checker PRO — Grok-3")
 
-api_key = os.environ.get("XAI_API_KEY")
-if not api_key:
-    st.error("API key missing!")
-    st.stop()
-
-client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
-
+# Header and uploader
 st.header("Upload All Files (Plans, Geotech, H1, RFI)")
 uploaded_files = st.file_uploader("", type="pdf", accept_multiple_files=True, key="files")
 
-# ... [rest of your code exactly the same as the last working version] ...
-# (extraction, RFI detection, compliance check, fact-check, etc.)
+# === FORCE BUTTONS TO SHOW ===
+col1, col2 = st.columns(2)
+with col1:
+    check_compliance = st.button("**COMPLIANCE CHECK**", type="primary", use_container_width=True)
+with col2:
+    check_rfi = st.button("**RFI RESPONSE**", type="secondary", use_container_width=True)
 
-# Keep everything else unchanged — just added the watermark above
+# Show thinking watermark only when spinner is active
+thinking_placeholder = st.empty()
+
+# Your existing extraction code here (unchanged)
+# ... [all your file reading, plan_text, rfi_text code] ...
+
+if check_compliance and other_files:
+    if plan_text.strip():
+        # Show random watermark during processing
+        thinking_placeholder.markdown(
+            f'<div class="thinking-watermark">{random.choice(PHRASES)}</div>',
+            unsafe_allow_html=True
+        )
+        with st.spinner("Grok-3 is analysing every page..."):
+            try:
+                # ... your Grok calls ...
+                # after final_report is ready:
+                thinking_placeholder.empty()  # remove watermark when done
+                st.balloons()
+                st.success("100% ACCURATE REPORT READY")
+                st.markdown(f"<div class='final-report'><strong>FINAL REPORT — GROK-3</strong>\n\n{final_report}</div>", unsafe_allow_html=True)
+            except Exception as e:
+                thinking_placeholder.empty()
+                st.error(f"Error: {e}")
+    else:
+        st.warning("No text found in plans.")
+else:
+    thinking_placeholder.empty()  # make sure it's gone when idle
 
 # Footer
 st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-3</div>", unsafe_allow_html=True)
