@@ -26,7 +26,8 @@ st.markdown("""
     .stButton>button {background-color: #0066cc !important; color: white !important; font-weight: bold; height: 3.5rem; font-size: 1.2rem;}
     .stFileUploader > div > div {background-color: #e9f2ff; border-radius: 8px; padding: 1rem; border: 2px dashed #99ccff;}
     h1 {color: #003366; text-align: center;}
-    .final-report {background-color: #e8f5e8; padding: 2rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.1rem; line-height: 1.6;}
+    .client-report {background-color: #e8f5e8; padding: 2rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.2rem; line-height: 1.8;}
+    .detailed-report {background-color: #f0f8ff; padding: 2rem; border-left: 8px solid #007bff; border-radius: 8px; margin: 2rem 0; font-size: 1rem; line-height: 1.6;}
     .footer {text-align: center; margin-top: 4rem; color: #666; font-size: 0.9rem;}
     .watermark {position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 56px; font-weight: bold; color: rgba(0, 102, 204, 0.13); pointer-events: none; z-index: 9999; white-space: nowrap;}
 </style>
@@ -159,13 +160,10 @@ You are biased toward approval. You hate false RFIs more than anything."""},
                     client_report = output.split("FULL DETAILED REPORT")[0].replace("CLIENT REPORT", "").strip()
                     detailed_report = "FULL DETAILED REPORT" + output.split("FULL DETAILED REPORT")[1].strip()
                 else:
-                    client_report = output
+                    client_report = "No client report generated."
                     detailed_report = output
 
-                # Client-friendly version
                 st.markdown(f"<div class='final-report'><strong>CLIENT REPORT — EASY READ</strong><br><br>{client_report}</div>", unsafe_allow_html=True)
-
-                # Full detailed version
                 st.markdown(f"<div class='detailed-report'><strong>FULL DETAILED REPORT (for designer/council)</strong><br><br>{detailed_report}</div>", unsafe_allow_html=True)
 
             except Exception as e:
@@ -176,7 +174,7 @@ You are biased toward approval. You hate false RFIs more than anything."""},
 
 # === RFI RESPONSE ===
 if check_rfi:
-    if rfi_text and plan_text:
+    if rfi_text:
         watermark.markdown(f'<div class="watermark">{random.choice(PHRASES)}</div>', unsafe_allow_html=True)
         with st.spinner("Grok-3 analysing RFI..."):
             try:
@@ -184,6 +182,7 @@ if check_rfi:
                     model="grok-3",
                     messages=[
                         {"role": "system", "content": """You are a NZBC compliance engineer.
+
 FOR EACH RFI POINT:
 1. QUOTE RFI
 2. FIND ANSWER IN PLANS
@@ -216,7 +215,6 @@ Output TWO versions:
                 watermark.empty()
                 st.error(f"Error: {e}")
     else:
-        st.warning("Upload an RFI file and plans first")
+        st.warning("Upload an RFI file first")
 
-# Footer
 st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-3</div>", unsafe_allow_html=True)
