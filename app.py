@@ -26,7 +26,8 @@ st.markdown("""
     .stButton>button {background-color: #0066cc !important; color: white !important; font-weight: bold; height: 3.5rem; font-size: 1.2rem;}
     .stFileUploader > div > div {background-color: #e9f2ff; border-radius: 8px; padding: 1rem; border: 2px dashed #99ccff;}
     h1 {color: #003366; text-align: center;}
-    .final-report {background-color: #e8f5e8; padding: 2rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.1rem; line-height: 1.6;}
+    .client-report {background-color: #e8f5e8; padding: 2rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.2rem; line-height: 1.8;}
+    .detailed-report {background-color: #f0f8ff; padding: 2rem; border-left: 8px solid #007bff; border-radius: 8px; margin: 2rem 0; font-size: 1rem; line-height: 1.6;}
     .footer {text-align: center; margin-top: 4rem; color: #666; font-size: 0.9rem;}
     .watermark {position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 56px; font-weight: bold; color: rgba(0, 102, 204, 0.13); pointer-events: none; z-index: 9999; white-space: nowrap;}
 </style>
@@ -41,57 +42,33 @@ if not api_key:
 
 client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
 
-st.header("Upload All Files (Plans, Geotech, H1, RFI)")
+st.header("Upload Plans (We'll Check Compliance & Predict RFIs)")
 uploaded_files = st.file_uploader("", type="pdf", accept_multiple_files=True, key="files")
 
-rfi_file = None
-other_files = []
-if uploaded_files:
-    for f in uploaded_files:
-        if "rfi" in f.name.lower():
-            rfi_file = f
-        else:
-            other_files.append(f)
-
-col1, col2 = st.columns(2)
-with col1:
-    check_compliance = st.button("COMPLIANCE CHECK", type="primary", use_container_width=True)
-with col2:
-    check_rfi = st.button("RFI RESPONSE", type="secondary", use_container_width=True)
+check_plans = st.button("CHECK PLANS", type="primary", use_container_width=True)
 
 watermark = st.empty()
 
 plan_text = ""
-rfi_text = ""
 
-if other_files:
-    for f in other_files:
+if uploaded_files:
+    for f in uploaded_files:
         try:
             reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
             for page_num, page in enumerate(reader.pages, 1):
                 t = page.extract_text() or ""
                 if t.strip():
-                    plan_text += f"--- {f.name} - Page {page_num} --- \n{t}\n\n"
+                    plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n\n"
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
-if rfi_file:
-    try:
-        reader = PyPDF2.PdfReader(io.BytesIO(rfi_file.getvalue()))
-        for page_num, page in enumerate(reader.pages, 1):
-            t = page.extract_text() or ""
-            if t.strip():
-                rfi_text += f"--- RFI Page {page_num} ---\n{t}\n\n"
-    except Exception as e:
-        st.error("Failed to read RFI")
-
-# === COMPLIANCE CHECK ===
-if check_compliance:
+# === COMBINED CHECK (COMPLIANCE + PREDICTED RFIs) ===
+if check_plans:
     if plan_text:
         watermark.markdown(f'<div class="watermark">{random.choice(PHRASES)}</div>', unsafe_allow_html=True)
-        with st.spinner("Grok-3 analysing every detail..."):
+        with st.spinner("Grok-3 analysing for compliance & possible RFIs..."):
             try:
-                # First pass
+                # First pass: Compliance check
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
@@ -99,7 +76,7 @@ if check_compliance:
 
 You ONLY flag something if it's 100% genuinely missing from every sheet, note, symbol, file.
 
-HARD RULES — YOU CANNOT BREAK THESE:
+HARD RULES — NEVER BREAK THESE:
 - Red box notes = fully deliberate and 100% compliant
 - Any note with "smoke", "detector", "alarm", "hush", "interconnected", "F7", NZS 4514, AS 3786, BS EN 14604, ISO 12239 = F7 100% compliant
 - Any note with "mechanical", "ducted", "27L/s", "50L/s", "extract", "ventilation" = G4 100% compliant
@@ -132,18 +109,17 @@ Bias toward approval. Hate false RFIs."""},
                 )
                 report = response.choices[0].message.content
 
-                # Fact check
+                # Fact check + predict RFIs
                 fact_check = client.chat.completions.create(
                     model="grok-3",
                     messages=[
-                        {"role": "system", "content": """You are the FINAL FACT CHECKER.
-                        - Red box notes = 100% compliant
-- Any mention of smoke detectors, hush, interconnected, NZS 4514, AS 3786 = F7 compliant
-- Any mention of mechanical ventilation, ducted, 27L/s, 50L/s, V symbol = G4 compliant
-Remove every false positive.
-Output TWO versions:
-1. CLIENT REPORT — Plain English, short, friendly, reassuring. Use bullets, simple words, "Good to go" for compliant items.
-2. FULL DETAILED REPORT — everything, clear for designer/council."""},
+                        {"role": "system", "content": """You are the FINAL FACT CHECKER & RFI PREDICTOR.
+                        Remove every false positive.
+                        Then predict probable RFIs based on common council issues (e.g., missing details on erosion, bracing, safety glass, hygienic surfaces, ventilation specs).
+                        Output THREE versions:
+                        1. CLIENT REPORT — Plain English, short, friendly, reassuring.
+                        2. FULL DETAILED REPORT — everything for the designer/council.
+                        3. PREDICTED RFIs — List likely RFIs + how to avoid them."""},
                         {"role": "user", "content": f"REPORT TO CHECK:\n{report}\n\nFULL PLANS:\n{plan_text}"}
                     ]
                 )
@@ -154,68 +130,24 @@ Output TWO versions:
                 st.success("100% ACCURATE REPORT READY")
 
                 # Split output
-                if "CLIENT REPORT" in output and "FULL DETAILED REPORT" in output:
+                if "CLIENT REPORT" in output and "FULL DETAILED REPORT" in output and "PREDICTED RFIs" in output:
                     client_report = output.split("FULL DETAILED REPORT")[0].replace("CLIENT REPORT", "").strip()
-                    detailed_report = "FULL DETAILED REPORT" + output.split("FULL DETAILED REPORT")[1].strip()
+                    detailed_report = "FULL DETAILED REPORT" + output.split("FULL DETAILED REPORT")[1].split("PREDICTED RFIs")[0].strip()
+                    predicted_rfis = "PREDICTED RFIs" + output.split("PREDICTED RFIs")[1].strip()
                 else:
                     client_report = output
                     detailed_report = output
+                    predicted_rfis = ""
 
                 st.markdown(f"<div class='final-report'><strong>CLIENT REPORT — EASY READ</strong><br><br>{client_report}</div>", unsafe_allow_html=True)
                 st.markdown(f"<div class='detailed-report'><strong>FULL DETAILED REPORT (for designer/council)</strong><br><br>{detailed_report}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='final-report'><strong>PREDICTED RFIs — WHAT COUNCIL MIGHT ASK</strong><br><br>{predicted_rfis}</div>", unsafe_allow_html=True)
 
             except Exception as e:
                 watermark.empty()
                 st.error(f"Error: {e}")
     else:
         st.warning("Upload plans first")
-
-# === RFI RESPONSE ===
-if check_rfi:
-    if rfi_text and plan_text:
-        watermark.markdown(f'<div class="watermark">{random.choice(PHRASES)}</div>', unsafe_allow_html=True)
-        with st.spinner("Grok-3 analysing RFI..."):
-            try:
-                response = client.chat.completions.create(
-                    model="grok-3",
-                    messages=[
-                        {"role": "system", "content": """You are a NZBC compliance engineer.
-
-FOR EACH RFI POINT:
-1. QUOTE RFI
-2. FIND ANSWER IN PLANS
-3. IF COMPLIANT: "ALREADY COMPLIANT" + quote + page
-4. IF NOT: FIX + ALTERNATIVE
-
-Check ALL clauses (B1, E1, E2, F7, G4, H1, council rules).
-
-Output TWO versions:
-1. CLIENT REPORT — Plain English, short, friendly, reassuring. Use bullets, simple words, "Good to go" for compliant items.
-2. FULL DETAILED REPORT — everything, clear for designer/council."""},
-                        {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{plan_text}"}
-                    ]
-                )
-                rfi_output = response.choices[0].message.content
-
-                watermark.empty()
-                st.success("RFI RESPONSE READY")
-
-                # Split output
-                if "CLIENT REPORT" in rfi_output and "FULL DETAILED REPORT" in rfi_output:
-                    rfi_client = rfi_output.split("FULL DETAILED REPORT")[0].replace("CLIENT REPORT", "").strip()
-                    rfi_detailed = "FULL DETAILED REPORT" + rfi_output.split("FULL DETAILED REPORT")[1].strip()
-                else:
-                    rfi_client = rfi_output
-                    rfi_detailed = rfi_output
-
-                st.markdown(f"<div class='final-report'><strong>CLIENT RFI RESPONSE — EASY READ</strong><br><br>{rfi_client}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div class='detailed-report'><strong>FULL DETAILED RFI RESPONSE (for designer/council)</strong><br><br>{rfi_detailed}</div>", unsafe_allow_html=True)
-
-            except Exception as e:
-                watermark.empty()
-                st.error(f"Error: {e}")
-    else:
-        st.warning("Upload an RFI file and plans first")
 
 # Footer
 st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-3</div>", unsafe_allow_html=True)
