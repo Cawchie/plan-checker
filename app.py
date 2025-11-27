@@ -26,8 +26,7 @@ st.markdown("""
     .stButton>button {background-color: #0066cc !important; color: white !important; font-weight: bold; height: 3.5rem; font-size: 1.2rem;}
     .stFileUploader > div > div {background-color: #e9f2ff; border-radius: 8px; padding: 1rem; border: 2px dashed #99ccff;}
     h1 {color: #003366; text-align: center;}
-    .client-report {background-color: #e8f5e8; padding: 2rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.2rem; line-height: 1.8;}
-    .detailed-report {background-color: #f0f8ff; padding: 2rem; border-left: 8px solid #007bff; border-radius: 8px; margin: 2rem 0; font-size: 1rem; line-height: 1.6;}
+    .final-report {background-color: #e8f5e8; padding: 2rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.1rem; line-height: 1.6;}
     .footer {text-align: center; margin-top: 4rem; color: #666; font-size: 0.9rem;}
     .watermark {position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 56px; font-weight: bold; color: rgba(0, 102, 204, 0.13); pointer-events: none; z-index: 9999; white-space: nowrap;}
 </style>
@@ -72,7 +71,7 @@ if other_files:
             for page_num, page in enumerate(reader.pages, 1):
                 t = page.extract_text() or ""
                 if t.strip():
-                    plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n\n"
+                    plan_text += f"--- {f.name} - Page {page_num} --- \n{t}\n\n"
         except Exception as e:
             st.error(f"Failed to read {f.name}: {e}")
 
@@ -96,14 +95,14 @@ if check_compliance:
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
-                        {"role": "system", "content": """You are the most senior, most accurate NZBC consent processor in New Zealand — 28 years experience, zero overturned RFIs.
+                        {"role": "system", "content": """You are the most senior NZBC consent processor in New Zealand — 28 years, zero overturned RFIs.
 
-You ONLY flag something if it is 100% genuinely missing from every sheet, note, symbol, and file.
+You ONLY flag something if it's 100% genuinely missing from every sheet, note, symbol, file.
 
 HARD RULES — YOU CANNOT BREAK THESE:
 - Red box notes = fully deliberate and 100% compliant
-- Any note containing "smoke", "detector", "alarm", "hush", "interconnected", "F7", NZS 4514, AS 3786, BS EN 14604, ISO 12239 = F7 100% compliant
-- Any note containing "mechanical", "ducted", "27L/s", "50L/s", "extract", "ventilation" = G4 100% compliant
+- Any note with "smoke", "detector", "alarm", "hush", "interconnected", "F7", NZS 4514, AS 3786, BS EN 14604, ISO 12239 = F7 100% compliant
+- Any note with "mechanical", "ducted", "27L/s", "50L/s", "extract", "ventilation" = G4 100% compliant
 - SD symbol anywhere = smoke alarms compliant
 - V symbol anywhere = ventilation compliant
 - R-values listed and ≥ Schedule Method = H1 compliant
@@ -112,23 +111,22 @@ HARD RULES — YOU CANNOT BREAK THESE:
 - PS1/PS3/PS4 mentioned or agreement = compliant
 - Anything written on Sheet 01, Sheet 06, or any sheet counts the same
 
-Before you EVER flag F7 or G4, you MUST quote the exact note or symbol that proves compliance.
+Before flagging, quote the exact note/symbol/page that proves compliance.
 
-Output EXACTLY this format:
+Output EXACTLY:
 
 **COMPLIANT ITEMS — PROOF**
-• F7 Smoke alarms: red box note "SMOKE DETECTORS SHALL BE INTERCONNECTED..." + SD symbols on all bedrooms/living (Dimensioned Floor Plan)
-• G4 Ventilation: red box note "MECHANICAL VENTILATION DUCTED... 27L/s general, 50L/s kitchen" + V symbol (Dimensioned Floor Plan)
-• H1: R-values Roof R3.6, Wall R2.8, Floor R1.8, Glazing R0.37 — meets Schedule Method Zone 1
+• B1 Structure: geotech notes on foundations (Sheet 05) + bracing plan (Sheet 08)
+• E2 Moisture: flashing & cladding details (Sheet 12)
 • etc.
 
 **REAL NON-COMPLIANCES ONLY**
-- Clause | Issue | File/Sheet | Proof it's actually missing | Fix
+- Clause | Issue | File/Sheet | Proof it's missing | Fix
 
-If everything is there (and it usually is):
-**NO ISSUES FOUND — CONSENT CAN BE ISSUED TODAY**
+If no issues:
+**NO ISSUES FOUND — CONSENT READY TODAY**
 
-You are biased toward approval. You hate false RFIs more than anything."""},
+Bias toward approval. Hate false RFIs."""},
                         {"role": "user", "content": plan_text}
                     ]
                 )
@@ -140,12 +138,12 @@ You are biased toward approval. You hate false RFIs more than anything."""},
                     messages=[
                         {"role": "system", "content": """You are the FINAL FACT CHECKER.
                         - Red box notes = 100% compliant
-                        - Any mention of smoke detectors, hush, interconnected, NZS 4514, AS 3786 = F7 compliant
-                        - Any mention of mechanical ventilation, ducted, 27L/s, 50L/s, V symbol = G4 compliant
-                        Remove every false positive.
-                        Output TWO versions:
-                        1. CLIENT REPORT — Plain English, short, friendly, reassuring. Use bullets, simple words, start with "Good to go" for compliant items.
-                        2. FULL DETAILED REPORT — everything for the designer/council, but keep it clear."""},
+- Any mention of smoke detectors, hush, interconnected, NZS 4514, AS 3786 = F7 compliant
+- Any mention of mechanical ventilation, ducted, 27L/s, 50L/s, V symbol = G4 compliant
+Remove every false positive.
+Output TWO versions:
+1. CLIENT REPORT — Plain English, short, friendly, reassuring. Use bullets, simple words, "Good to go" for compliant items.
+2. FULL DETAILED REPORT — everything, clear for designer/council."""},
                         {"role": "user", "content": f"REPORT TO CHECK:\n{report}\n\nFULL PLANS:\n{plan_text}"}
                     ]
                 )
@@ -189,9 +187,11 @@ FOR EACH RFI POINT:
 3. IF COMPLIANT: "ALREADY COMPLIANT" + quote + page
 4. IF NOT: FIX + ALTERNATIVE
 
+Check ALL clauses (B1, E1, E2, F7, G4, H1, council rules).
+
 Output TWO versions:
-1. CLIENT REPORT — Plain English, short, friendly.
-2. FULL DETAILED REPORT — everything."""},
+1. CLIENT REPORT — Plain English, short, friendly, reassuring. Use bullets, simple words, "Good to go" for compliant items.
+2. FULL DETAILED REPORT — everything, clear for designer/council."""},
                         {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{plan_text}"}
                     ]
                 )
