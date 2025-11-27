@@ -5,6 +5,7 @@ import io
 import os
 import random
 
+# === FUNNY PHRASES ===
 PHRASES = [
     "Might be a lil while, grab a coffee ☕",
     "Grok is reading every note like a boss…",
@@ -14,7 +15,7 @@ PHRASES = [
     "Your consent is loading…",
     "Grok just saved you another RFI",
     "This job is cleaner than my code",
-    "Consent loading… 99%… (it’s a lie, it’s 100%)"
+    "Consent loading… 99%… (it's a lie, it's 100%)"
 ]
 
 st.set_page_config(page_title="xAI Plan Checker PRO", layout="centered")
@@ -84,12 +85,13 @@ if rfi_file:
     except Exception as e:
         st.error("Failed to read RFI")
 
+# === COMPLIANCE CHECK ===
 if check_compliance:
     if plan_text:
         watermark.markdown(f'<div class="watermark">{random.choice(PHRASES)}</div>', unsafe_allow_html=True)
         with st.spinner("Grok-3 analysing every detail..."):
             try:
-                # Step 1: First pass
+                # First pass
                 response = client.chat.completions.create(
                     model="grok-3",
                     messages=[
@@ -131,7 +133,7 @@ You are biased toward approval. You hate false RFIs more than anything."""},
                 )
                 report = response.choices[0].message.content
 
-                # Step 2: Fact check
+                # Fact check
                 fact_check = client.chat.completions.create(
                     model="grok-3",
                     messages=[
@@ -141,8 +143,8 @@ You are biased toward approval. You hate false RFIs more than anything."""},
                         - Any mention of mechanical ventilation, ducted, 27L/s, 50L/s, V symbol = G4 compliant
                         Remove every false positive.
                         Output TWO versions:
-                        1. CLIENT REPORT — Plain English, short, friendly, reassuring
-                        2. FULL DETAILED REPORT — everything for the designer/council""" },
+                        1. CLIENT REPORT — Plain English, short, friendly, reassuring. Use bullets, simple words, start with "Good to go" for compliant items.
+                        2. FULL DETAILED REPORT — everything for the designer/council, but keep it clear."""},
                         {"role": "user", "content": f"REPORT TO CHECK:\n{report}\n\nFULL PLANS:\n{plan_text}"}
                     ]
                 )
@@ -160,7 +162,10 @@ You are biased toward approval. You hate false RFIs more than anything."""},
                     client_report = output
                     detailed_report = output
 
+                # Client-friendly version
                 st.markdown(f"<div class='final-report'><strong>CLIENT REPORT — EASY READ</strong><br><br>{client_report}</div>", unsafe_allow_html=True)
+
+                # Full detailed version
                 st.markdown(f"<div class='detailed-report'><strong>FULL DETAILED REPORT (for designer/council)</strong><br><br>{detailed_report}</div>", unsafe_allow_html=True)
 
             except Exception as e:
@@ -168,6 +173,50 @@ You are biased toward approval. You hate false RFIs more than anything."""},
                 st.error(f"Error: {e}")
     else:
         st.warning("Upload plans first")
+
+# === RFI RESPONSE ===
+if check_rfi:
+    if rfi_text and plan_text:
+        watermark.markdown(f'<div class="watermark">{random.choice(PHRASES)}</div>', unsafe_allow_html=True)
+        with st.spinner("Grok-3 analysing RFI..."):
+            try:
+                response = client.chat.completions.create(
+                    model="grok-3",
+                    messages=[
+                        {"role": "system", "content": """You are a NZBC compliance engineer.
+FOR EACH RFI POINT:
+1. QUOTE RFI
+2. FIND ANSWER IN PLANS
+3. IF COMPLIANT: "ALREADY COMPLIANT" + quote + page
+4. IF NOT: FIX + ALTERNATIVE
+
+Output TWO versions:
+1. CLIENT REPORT — Plain English, short, friendly.
+2. FULL DETAILED REPORT — everything."""},
+                        {"role": "user", "content": f"RFI:\n{rfi_text}\n\nPLANS:\n{plan_text}"}
+                    ]
+                )
+                rfi_output = response.choices[0].message.content
+
+                watermark.empty()
+                st.success("RFI RESPONSE READY")
+
+                # Split output
+                if "CLIENT REPORT" in rfi_output and "FULL DETAILED REPORT" in rfi_output:
+                    rfi_client = rfi_output.split("FULL DETAILED REPORT")[0].replace("CLIENT REPORT", "").strip()
+                    rfi_detailed = "FULL DETAILED REPORT" + rfi_output.split("FULL DETAILED REPORT")[1].strip()
+                else:
+                    rfi_client = rfi_output
+                    rfi_detailed = rfi_output
+
+                st.markdown(f"<div class='final-report'><strong>CLIENT RFI RESPONSE — EASY READ</strong><br><br>{rfi_client}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='detailed-report'><strong>FULL DETAILED RFI RESPONSE (for designer/council)</strong><br><br>{rfi_detailed}</div>", unsafe_allow_html=True)
+
+            except Exception as e:
+                watermark.empty()
+                st.error(f"Error: {e}")
+    else:
+        st.warning("Upload an RFI file and plans first")
 
 # Footer
 st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-3</div>", unsafe_allow_html=True)
