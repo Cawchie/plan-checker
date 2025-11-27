@@ -160,7 +160,7 @@ You are biased toward approval. You hate false RFIs more than anything."""},
                     client_report = output.split("FULL DETAILED REPORT")[0].replace("CLIENT REPORT", "").strip()
                     detailed_report = "FULL DETAILED REPORT" + output.split("FULL DETAILED REPORT")[1].strip()
                 else:
-                    client_report = "No client report generated."
+                    client_report = output
                     detailed_report = output
 
                 st.markdown(f"<div class='final-report'><strong>CLIENT REPORT — EASY READ</strong><br><br>{client_report}</div>", unsafe_allow_html=True)
@@ -174,7 +174,7 @@ You are biased toward approval. You hate false RFIs more than anything."""},
 
 # === RFI RESPONSE ===
 if check_rfi:
-    if rfi_text:
+    if rfi_text and plan_text:
         watermark.markdown(f'<div class="watermark">{random.choice(PHRASES)}</div>', unsafe_allow_html=True)
         with st.spinner("Grok-3 analysing RFI..."):
             try:
@@ -215,6 +215,7 @@ Output TWO versions:
                 watermark.empty()
                 st.error(f"Error: {e}")
     else:
-        st.warning("Upload an RFI file first")
+        st.warning("Upload an RFI file and plans first")
 
+# Footer
 st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-3</div>", unsafe_allow_html=True)
