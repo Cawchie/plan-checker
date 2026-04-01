@@ -1,153 +1,31 @@
 import streamlit as st
-from openai import OpenAI
-import PyPDF2
-import io
-import os
-import random
 
-# === FUNNY PHRASES ===
-PHRASES = [
-    "Might be a lil while, grab a coffee ☕",
-    "Grok is reading every note like a boss…",
-    "Council officers wish they were this thorough",
-    "Finding zero issues… as usual",
-    "Hold tight, making the council jealous",
-    "Your consent is loading…",
-    "Grok just saved you another RFI",
-    "This job is cleaner than my code",
-    "Consent loading… 99%… (it's a lie, it's 100%)"
-]
+st.set_page_config(page_title="NOHO Site Checker", page_icon="🌿", layout="centered")
 
-st.set_page_config(page_title="xAI Plan Checker PRO", layout="centered")
+st.image("https://brad21005.wixsite.com/noho/NOHO-logo.png", width=180)  # replace with your actual logo URL if needed
+st.title("Check if your site can use the 2026 exemption")
+st.markdown("**Tiny homes. Enormous living.**  \nA calm, simple check for the new building consent exemption in Aotearoa.")
 
-st.markdown("""
-<style>
-    .main {background-color: #f8f9fa; padding: 2rem; border-radius: 10px;}
-    .stButton>button {background-color: #0066cc !important; color: white !important; font-weight: bold; height: 3.5rem; font-size: 1.2rem;}
-    .stFileUploader > div > div {background-color: #e9f2ff; border-radius: 8px; padding: 1rem; border: 2px dashed #99ccff;}
-    h1 {color: #003366; text-align: center;}
-    .client-report {background-color: #e8f5e8; padding: 2rem; border-left: 8px solid #28a745; border-radius: 8px; margin: 2rem 0; font-size: 1.2rem; line-height: 1.8;}
-    .detailed-report {background-color: #f0f8ff; padding: 2rem; border-left: 8px solid #007bff; border-radius: 8px; margin: 2rem 0; font-size: 1rem; line-height: 1.6;}
-    .footer {text-align: center; margin-top: 4rem; color: #666; font-size: 0.9rem;}
-    .watermark {position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 56px; font-weight: bold; color: rgba(0, 102, 204, 0.13); pointer-events: none; z-index: 9999; white-space: nowrap;}
-</style>
-""", unsafe_allow_html=True)
+st.write("---")
 
-st.title("xAI Plan Checker PRO — Grok-3")
+size = st.number_input("Approx. size of building you want (m²)", min_value=10, max_value=200, value=55, step=1)
 
-api_key = os.environ.get("XAI_API_KEY")
-if not api_key:
-    st.error("API key missing! Add XAI_API_KEY in Secrets.")
-    st.stop()
+single_storey = st.checkbox("It is single-storey")
+standalone = st.checkbox("It is detached / standalone")
+self_contained = st.checkbox("It will be fully self-contained (kitchen, bathroom, living, sleeping)")
 
-client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
-
-st.header("Upload Plans (We'll Check Compliance & Predict RFIs)")
-uploaded_files = st.file_uploader("", type="pdf", accept_multiple_files=True, key="files")
-
-check_plans = st.button("CHECK PLANS", type="primary", use_container_width=True)
-
-watermark = st.empty()
-
-plan_text = ""
-
-if uploaded_files:
-    for f in uploaded_files:
-        try:
-            reader = PyPDF2.PdfReader(io.BytesIO(f.getvalue()))
-            for page_num, page in enumerate(reader.pages, 1):
-                t = page.extract_text() or ""
-                if t.strip():
-                    plan_text += f"--- {f.name} - Page {page_num} ---\n{t}\n\n"
-        except Exception as e:
-            st.error(f"Failed to read {f.name}: {e}")
-
-# === COMBINED CHECK (COMPLIANCE + PREDICTED RFIs) ===
-if check_plans:
-    if plan_text:
-        watermark.markdown(f'<div class="watermark">{random.choice(PHRASES)}</div>', unsafe_allow_html=True)
-        with st.spinner("Grok-3 analysing for compliance & possible RFIs..."):
-            try:
-                # First pass: Compliance check
-                response = client.chat.completions.create(
-                    model="grok-3",
-                    messages=[
-                        {"role": "system", "content": """You are the most senior NZBC consent processor in New Zealand — 28 years, zero overturned RFIs.
-
-You ONLY flag something if it's 100% genuinely missing from every sheet, note, symbol, file.
-
-HARD RULES — NEVER BREAK THESE:
-- Red box notes = fully deliberate and 100% compliant
-- Any note with "smoke", "detector", "alarm", "hush", "interconnected", "F7", NZS 4514, AS 3786, BS EN 14604, ISO 12239 = F7 100% compliant
-- Any note with "mechanical", "ducted", "27L/s", "50L/s", "extract", "ventilation" = G4 100% compliant
-- SD symbol anywhere = smoke alarms compliant
-- V symbol anywhere = ventilation compliant
-- R-values listed and ≥ Schedule Method = H1 compliant
-- Geotech report uploaded or referenced = B1 foundations compliant
-- Bracing demand < supply = compliant
-- PS1/PS3/PS4 mentioned or agreement = compliant
-- Anything written on Sheet 01, Sheet 06, or any sheet counts the same
-
-Before flagging, quote the exact note/symbol/page that proves compliance.
-
-Output EXACTLY:
-
-**COMPLIANT ITEMS — PROOF**
-• B1 Structure: geotech notes on foundations (Sheet 05) + bracing plan (Sheet 08)
-• E2 Moisture: flashing & cladding details (Sheet 12)
-• etc.
-
-**REAL NON-COMPLIANCES ONLY**
-- Clause | Issue | File/Sheet | Proof it's missing | Fix
-
-If no issues:
-**NO ISSUES FOUND — CONSENT READY TODAY**
-
-Bias toward approval. Hate false RFIs."""},
-                        {"role": "user", "content": plan_text}
-                    ]
-                )
-                report = response.choices[0].message.content
-
-                # Fact check + predict RFIs
-                fact_check = client.chat.completions.create(
-                    model="grok-3",
-                    messages=[
-                        {"role": "system", "content": """You are the FINAL FACT CHECKER & RFI PREDICTOR.
-                        Remove every false positive.
-                        Then predict probable RFIs based on common council issues (e.g., missing details on erosion, bracing, safety glass, hygienic surfaces, ventilation specs).
-                        Output THREE versions:
-                        1. CLIENT REPORT — Plain English, short, friendly, reassuring.
-                        2. FULL DETAILED REPORT — everything for the designer/council.
-                        3. PREDICTED RFIs — List likely RFIs + how to avoid them."""},
-                        {"role": "user", "content": f"REPORT TO CHECK:\n{report}\n\nFULL PLANS:\n{plan_text}"}
-                    ]
-                )
-                output = fact_check.choices[0].message.content
-
-                watermark.empty()
-                st.balloons()
-                st.success("100% ACCURATE REPORT READY")
-
-                # Split output
-                if "CLIENT REPORT" in output and "FULL DETAILED REPORT" in output and "PREDICTED RFIs" in output:
-                    client_report = output.split("FULL DETAILED REPORT")[0].replace("CLIENT REPORT", "").strip()
-                    detailed_report = "FULL DETAILED REPORT" + output.split("FULL DETAILED REPORT")[1].split("PREDICTED RFIs")[0].strip()
-                    predicted_rfis = "PREDICTED RFIs" + output.split("PREDICTED RFIs")[1].strip()
-                else:
-                    client_report = output
-                    detailed_report = output
-                    predicted_rfis = ""
-
-                st.markdown(f"<div class='final-report'><strong>CLIENT REPORT — EASY READ</strong><br><br>{client_report}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div class='detailed-report'><strong>FULL DETAILED REPORT (for designer/council)</strong><br><br>{detailed_report}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div class='final-report'><strong>PREDICTED RFIs — WHAT COUNCIL MIGHT ASK</strong><br><br>{predicted_rfis}</div>", unsafe_allow_html=True)
-
-            except Exception as e:
-                watermark.empty()
-                st.error(f"Error: {e}")
+if st.button("Check My Site", type="primary"):
+    if size > 70:
+        st.error("**Āroha mai** – This size may need full consent. The 2026 exemption is for dwellings 70 m² or under.")
+        st.info("We can still help with thoughtful custom designs that honour your whenua.")
+    elif not single_storey:
+        st.warning("**Almost** – The exemption requires single-storey only.")
+    elif not standalone:
+        st.warning("**Almost** – The exemption requires a detached, standalone dwelling.")
+    elif not self_contained:
+        st.warning("**Almost** – The exemption requires a fully self-contained dwelling.")
     else:
-        st.warning("Upload plans first")
+        st.success("**Yes – your site looks perfect for a NOHO cabin under 70 m².**  \nA place to stay, to sit, to dwell, to live.")
+        st.info("Next steps: Hand the plans to your Licensed Building Practitioner, notify council via PIM, and build with confidence.")
 
-# Footer
-st.markdown("<div class='footer'>xAI Plan Checker PRO © 2025 | Powered by Grok-3</div>", unsafe_allow_html=True)
+st.caption("This is a helpful guide only. You and your LBP are responsible for confirming site-specific compliance with the Building and Construction (Small Stand-alone Dwellings) Amendment Act 2025.")
