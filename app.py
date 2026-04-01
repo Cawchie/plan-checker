@@ -1,4 +1,5 @@
 import streamlit as st
+import requests
 
 st.set_page_config(page_title="NOHO Site Checker", page_icon="🌿", layout="centered")
 
@@ -7,27 +8,49 @@ st.markdown("**Tiny Homes. Enormous Living.**")
 
 st.write("---")
 
+api_key = st.text_input("xAI API Key (for Grok)", type="password", help="Get this from console.x.ai")
+
 address = st.text_input("Property Address", placeholder="e.g. 77a Helvetia road, Pukekohe")
 location = st.text_input("Approx. location on site", placeholder="backyard, side yard, front lawn, etc.")
 size = st.number_input("Approx. size of building you want (m²)", min_value=10, max_value=200, value=55, step=1)
 
-st.write("---")
-
 single = st.checkbox("It is single-storey", value=True)
 detached = st.checkbox("It is detached / standalone", value=True)
-self_contained = st.checkbox("It will be fully self-contained (kitchen, bathroom, living, sleeping)", value=True)
+self_contained = st.checkbox("It will be fully self-contained", value=True)
 
 if st.button("Check My Site", type="primary", use_container_width=True):
-    st.write("**Grok is checking your site against the 2026 exemption rules...**")
-    
-    if size > 70:
-        st.error("**Āroha mai** – This size is over 70 m² so it does not qualify for the exemption.")
-        st.info("You will likely need full building consent. We can still help with custom NOHO designs that honour your whenua.")
+    if not api_key:
+        st.error("Please enter your xAI API key above")
     else:
-        st.success("**Yes – your site looks perfect for a NOHO cabin under 70 m².**")
-        st.info("A place to stay, to sit, to dwell, to live.")
-        
-        if not single or not detached or not self_contained:
-            st.warning("**One small thing:** Make sure it is single-storey, standalone, and fully self-contained. Double-check with your LBP and council.")
+        with st.spinner("Grok is checking the 2026 exemption rules for you..."):
+            prompt = f"""
+You are Grok helping a Kiwi check if their site qualifies for the 2026 building consent exemption for small stand-alone dwellings (max 70m², single-storey, detached, self-contained).
 
-st.caption("This is a helpful guide only. Always confirm with your Licensed Building Practitioner and local council.")
+Inputs:
+- Address: {address}
+- Location on site: {location}
+- Proposed size: {size} m²
+- Single-storey: {single}
+- Detached: {detached}
+- Self-contained: {self_contained}
+
+Give a calm, warm, Kiwi-friendly answer. Use te reo where natural. Tell them clearly if it qualifies or not, and why. End with next steps.
+"""
+
+            response = requests.post(
+                "https://api.x.ai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={
+                    "model": "grok-beta",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7
+                }
+            )
+
+            if response.status_code == 200:
+                answer = response.json()["choices"][0]["message"]["content"]
+                st.markdown(answer)
+            else:
+                st.error("Something went wrong with the Grok API. Check your API key.")
+
+st.caption("This tool uses Grok (xAI) for real checking. Always confirm with your LBP and council.")
