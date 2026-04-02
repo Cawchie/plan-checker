@@ -1,5 +1,4 @@
 import streamlit as st
-import requests
 
 st.set_page_config(page_title="NOHO Site Checker", page_icon="🌿", layout="centered")
 
@@ -19,35 +18,11 @@ detached = st.checkbox("It is detached / standalone", value=True)
 self_contained = st.checkbox("It will be fully self-contained (kitchen, bathroom, living, sleeping)", value=True)
 
 if st.button("Check My Site", type="primary", use_container_width=True):
-    with st.spinner("Grok is checking the 2026 exemption rules for you..."):
-        prompt = f"""
-You are Grok helping a Kiwi check if their site qualifies for the 2026 building consent exemption for small stand-alone dwellings (max 70 m², single-storey, detached, self-contained).
+    if size <= 70:
+        st.success("**Yes – your site looks perfect for a NOHO cabin under 70 m².**\nA place to stay, to sit, to dwell, to live.")
+        st.info("Next steps: Hand the plans to your Licensed Building Practitioner, notify council via PIM, and build with confidence.")
+    else:
+        st.error("**Āroha mai** – This size may need full consent.\nThe 2026 exemption is for dwellings 70 m² or under.")
+        st.info("We can still help with thoughtful custom designs that honour your whenua.")
 
-Inputs:
-- Address: {address}
-- Location on site: {location}
-- Proposed size: {size} m²
-- Single-storey: {single}
-- Detached: {detached}
-- Self-contained: {self_contained}
-
-Give a calm, warm, Kiwi-friendly answer. Use te reo where natural. Tell them clearly if it qualifies or not, and why. End with next steps.
-"""
-
-        response = requests.post(
-            "https://api.x.ai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {st.secrets['XAI_API_KEY']}"},
-            json={
-                "model": "grok-beta",
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.7
-            }
-        )
-
-        if response.status_code == 200:
-            answer = response.json()["choices"][0]["message"]["content"]
-            st.markdown(answer)
-        else:
-            st.error("Something went wrong with the Grok API. Please check your secret key in Streamlit Cloud.")
-
-st.caption("This tool uses Grok (xAI) for real checking. Always confirm with your LBP and local council.")
+st.caption("This is a helpful guide only. Always confirm with your LBP and local council.")
